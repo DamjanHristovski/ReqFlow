@@ -21,26 +21,89 @@ specifications.
 
 ## Architecture Overview
 
-_Grows as each phase lands. Currently reflects Phase 1._
+_Grows as each phase lands. Currently reflects Phase 2._
 
 - **Controllers → Form Requests → Models** for standard CRUD.
 - **Controllers never call OpenAI directly.** The intended flow (built out in
   Phase 6) is `Controller → Job → Service (app/Services/OpenAIService.php) →
   OpenAI API`, so AI calls never block an HTTP request.
-- **Authorization** via Laravel Policies/Gates (introduced in Phase 2 once
-  Teams exist).
+- **Authorization** via Laravel Policies (`app/Policies/TeamPolicy.php`),
+  registered by Laravel's naming-convention auto-discovery — no manual
+  registration needed.
+- **Teams** (`app/Models/Team.php`) are the top-level ownership boundary.
+  Membership and role (`owner` / `member`) live in a `team_members` pivot
+  table (`app/Models/TeamMember.php`), not directly on `User` — a user can
+  belong to many teams with a different role in each. A team can never end up
+  without an owner: the last remaining owner can't be demoted or removed
+  (enforced in `TeamMemberController`).
 - Postgres runs only in Docker; PHP/artisan run natively on the host — see
   [Local Development](#local-development) below.
 
 ## Project Roadmap
 
 - [x] **Phase 1** — Project init, Docker Postgres, Laravel Breeze auth (Blade)
-- [ ] **Phase 2** — Teams, team membership, roles, authorization
+- [x] **Phase 2** — Teams, team membership, roles, authorization
 - [ ] **Phase 3** — Projects & Specifications CRUD
 - [ ] **Phase 4** — Specification version history
 - [ ] **Phase 5** — Comments
 - [ ] **Phase 6** — OpenAI integration, Jobs, database queue
 - [ ] **Phase 7** — Deployment configuration (Render)
+
+## Routes
+
+_Grows as each phase lands. Currently reflects Phase 2. All routes below
+require authentication (redirect to `/login` if signed out) unless noted
+otherwise._
+
+### General
+
+| Method | URI | Name | What it shows |
+|---|---|---|---|
+| GET | `/` | — | No page of its own — redirects to `/dashboard` if signed in, `/login` otherwise. |
+| GET | `/dashboard` | `dashboard` | Landing page after login; links to Teams. |
+
+### Authentication *(guest-only unless noted)*
+
+| Method | URI | Name | What it shows |
+|---|---|---|---|
+| GET | `/register` | `register` | Registration form (name, email, password). |
+| POST | `/register` | — | Creates the account and logs the user in. |
+| GET | `/login` | `login` | Login form. |
+| POST | `/login` | — | Authenticates and starts the session. |
+| POST | `/logout` | `logout` | *(authenticated)* Ends the session. |
+| GET | `/forgot-password` | `password.request` | Form to request a password reset email. |
+| POST | `/forgot-password` | `password.email` | Sends the password reset email. |
+| GET | `/reset-password/{token}` | `password.reset` | Form to set a new password, from the emailed link. |
+| POST | `/reset-password` | `password.store` | Saves the new password. |
+| GET | `/verify-email` | `verification.notice` | *(authenticated)* "Please verify your email" notice. |
+| GET | `/verify-email/{id}/{hash}` | `verification.verify` | *(authenticated)* Verifies the address, from the emailed link. |
+| POST | `/email/verification-notification` | `verification.send` | *(authenticated)* Resends the verification email. |
+| GET | `/confirm-password` | `password.confirm` | *(authenticated)* Re-enter your password before a sensitive action. |
+| POST | `/confirm-password` | — | *(authenticated)* Confirms the password. |
+| PUT | `/password` | `password.update` | *(authenticated)* Changes the password, from the Profile page. |
+
+### Profile
+
+| Method | URI | Name | What it shows |
+|---|---|---|---|
+| GET | `/profile` | `profile.edit` | Update name/email, change password, delete account. |
+| PATCH | `/profile` | `profile.update` | Saves name/email changes. |
+| DELETE | `/profile` | `profile.destroy` | Deletes the account (requires password confirmation). |
+
+### Teams
+
+| Method | URI | Name | What it shows |
+|---|---|---|---|
+| GET | `/teams` | `teams.index` | Every team the user belongs to, with their role. |
+| GET | `/teams/create` | `teams.create` | Form to create a new team. |
+| POST | `/teams` | `teams.store` | Creates the team; creator becomes `owner`. |
+| GET | `/teams/{team}` | `teams.show` | Team detail: member list with roles, add-member form and role/remove controls (owner only), leave-team button. Requires membership — 403 otherwise. |
+| GET | `/teams/{team}/edit` | `teams.edit` | Rename or delete the team. Owner only. |
+| PUT/PATCH | `/teams/{team}` | `teams.update` | Saves the new team name. Owner only. |
+| DELETE | `/teams/{team}` | `teams.destroy` | Soft-deletes the team. Owner only. |
+| POST | `/teams/{team}/members` | `teams.members.store` | Adds an existing user as a member, by email. Owner only. |
+| PATCH | `/teams/{team}/members/{member}` | `teams.members.update` | Changes a member's role (`owner`/`member`). Owner only; blocked if it would leave the team without an owner. |
+| DELETE | `/teams/{team}/members/{member}` | `teams.members.destroy` | Removes a member (owner only), or lets a member remove themselves (leave team). Blocked if it would remove the last owner. |
 
 ## Getting Started
 
@@ -99,6 +162,20 @@ php artisan queue:listen  # background Jobs (needed from Phase 6 onward)
 > `laravel/pail` for log tailing, which requires the `pcntl` extension. `pcntl`
 > is not available on Windows PHP builds, so that combined script will fail
 > on Windows — run the commands above individually instead.
+
+### IDE Helper
+
+`barryvdh/laravel-ide-helper` is a dev dependency so editors (PhpStorm,
+Intelephense) can resolve magically-proxied methods (`auth()->check()`,
+facades, model properties) instead of flagging them as undefined. Its
+generated files are gitignored and not part of the app — regenerate them
+after pulling changes that add models, facades, or routes:
+
+```bash
+php artisan ide-helper:generate
+php artisan ide-helper:meta
+php artisan ide-helper:models --nowrite
+```
 
 ### Tests
 

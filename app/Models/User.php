@@ -5,6 +5,7 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -45,5 +46,30 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function teams(): BelongsToMany
+    {
+        return $this->belongsToMany(Team::class, 'team_members')
+            ->withPivot('role')
+            ->withTimestamps();
+    }
+
+    public function ownedTeams(): BelongsToMany
+    {
+        return $this->teams()->wherePivot('role', TeamMember::ROLE_OWNER);
+    }
+
+    public function isOwnerOf(Team $team): bool
+    {
+        return $this->teams()
+            ->wherePivot('role', TeamMember::ROLE_OWNER)
+            ->where('teams.id', $team->id)
+            ->exists();
+    }
+
+    public function isMemberOf(Team $team): bool
+    {
+        return $this->teams()->where('teams.id', $team->id)->exists();
     }
 }
