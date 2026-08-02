@@ -6,6 +6,8 @@ use App\Http\Requests\StoreSpecificationRequest;
 use App\Http\Requests\UpdateSpecificationRequest;
 use App\Models\Project;
 use App\Models\Specification;
+use App\Services\SpecificationVersionService;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 
 class SpecificationController extends Controller
@@ -17,12 +19,14 @@ class SpecificationController extends Controller
         return view('specifications.create', compact('project'));
     }
 
-    public function store(StoreSpecificationRequest $request, Project $project)
+    public function store(StoreSpecificationRequest $request, Project $project, SpecificationVersionService $versions)
     {
         $specification = $project->specifications()->create([
             ...$request->validated(),
             'created_by' => Auth::id(),
         ]);
+
+        $versions->recordInitialVersion($specification, Auth::user());
 
         return redirect()->route('specifications.show', $specification)->with('status', 'Specification created.');
     }
@@ -41,9 +45,25 @@ class SpecificationController extends Controller
         return view('specifications.edit', compact('specification'));
     }
 
-    public function update(UpdateSpecificationRequest $request, Specification $specification)
+    public function update(UpdateSpecificationRequest $request, Specification $specification, SpecificationVersionService $versions)
     {
+        $originalContent = $versions->snapshot($specification);
+        $newContent = Arr::only($request->validated(), Specification::VERSIONED_FIELDS);
+
+        if ($newContent !== $originalContent && ! $request->boolean('force_new_version')) {
+            $match = $versions->findMatchingVersion($specification, $newContent);
+
+            if ($match) {
+                return back()->withInput()->with([
+                    'matched_version_id' => $match->id,
+                    'matched_version_number' => $match->version_number,
+                ]);
+            }
+        }
+
         $specification->update($request->validated());
+
+        $versions->recordVersionIfChanged($specification, $originalContent, Auth::user());
 
         return redirect()->route('specifications.show', $specification)->with('status', 'Specification updated.');
     }

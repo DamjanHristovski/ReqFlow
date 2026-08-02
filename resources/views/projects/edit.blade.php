@@ -46,12 +46,34 @@
                     {{ __('Once a project is deleted, all of its specifications will be permanently unavailable to its members.') }}
                 </p>
 
-                <form method="POST" action="{{ route('projects.destroy', $project) }}" onsubmit="return confirm('{{ __('Are you sure?') }}')" class="mt-4">
-                    @csrf
-                    @method('DELETE')
-                    <x-danger-button>{{ __('Delete Project') }}</x-danger-button>
-                </form>
+                <x-danger-button x-data="" x-on:click.prevent="$dispatch('open-modal', 'confirm-project-deletion')" class="mt-4">
+                    {{ __('Delete Project') }}
+                </x-danger-button>
             </div>
         </div>
     </div>
+
+    <x-modal name="confirm-project-deletion" focusable>
+        <form method="POST" action="{{ route('projects.destroy', $project) }}" class="p-6">
+            @csrf
+            @method('DELETE')
+
+            <h2 class="text-lg font-medium text-gray-900">
+                {{ __('Delete this project?') }}
+            </h2>
+
+            <p class="mt-1 text-sm text-gray-600">
+                {{ __('Once a project is deleted, all of its specifications will be permanently unavailable to its members. This cannot be undone.') }}
+            </p>
+
+            <div class="mt-6 flex justify-end gap-3">
+                <x-secondary-button type="button" x-on:click="$dispatch('close')">
+                    {{ __('Cancel') }}
+                </x-secondary-button>
+                <x-danger-button type="submit">
+                    {{ __('Delete Project') }}
+                </x-danger-button>
+            </div>
+        </form>
+    </x-modal>
 </x-app-layout>

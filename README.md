@@ -21,7 +21,7 @@ specifications.
 
 ## Architecture Overview
 
-_Grows as each phase lands. Currently reflects Phase 3._
+_Grows as each phase lands. Currently reflects Phase 4._
 
 - **Controllers → Form Requests → Models** for standard CRUD.
 - **Controllers never call OpenAI directly.** The intended flow (built out in
@@ -42,9 +42,32 @@ _Grows as each phase lands. Currently reflects Phase 3._
   create/edit/delete Projects (structural, deliberately restricted); any team
   **member** can create/edit/delete Specifications within them (day-to-day
   work, deliberately open). This asymmetry is intentional, not an oversight.
-- **`specifications.current_version`** exists now (default `1`) but isn't
-  incremented yet — Phase 4 adds the `specification_versions` table and the
-  logic that bumps it on edit.
+- **Specification version history** (`specification_versions` table) stores
+  an immutable, insert-only JSON snapshot of a specification's content per
+  version, plus who changed it. Creating a specification writes version 1;
+  editing one only writes a new version (and bumps
+  `specifications.current_version`) if the versioned content actually
+  changed — a no-op save doesn't spam the history. This logic lives in
+  `app/Services/SpecificationVersionService.php`, called explicitly from
+  `SpecificationController` (not a model observer), so the same service can
+  be reused from a Phase 6 AI job without depending on the `Auth` facade
+  inside a model event.
+- **Restoring an old version rewinds the `current_version` pointer** to that
+  version's number — it does **not** create a new version row. Nothing is
+  ever deleted either: every version stays in the table regardless of
+  whether it's "current." One consequence: once you've rewound past a
+  version number and then make a genuinely new edit, that edit can't reuse
+  the version number you rewound past (it already belongs to different
+  content, and version numbers are unique per specification) — so numbering
+  jumps to one past the highest version ever created for that specification,
+  not `current_version + 1`.
+- **Editing to content that exactly matches an existing version prompts
+  instead of silently duplicating it.** Saving a specification checks the
+  new content against every prior version (not just the current one); if it
+  matches, the edit isn't applied — the user is shown a modal ("This matches
+  Version X — restore instead?") and chooses between restoring to that
+  version or saving as a new version anyway (`force_new_version` bypasses
+  the check on the resubmit).
 - Postgres runs only in Docker; PHP/artisan run natively on the host — see
   [Local Development](#local-development) below.
 
@@ -53,14 +76,14 @@ _Grows as each phase lands. Currently reflects Phase 3._
 - [x] **Phase 1** — Project init, Docker Postgres, Laravel Breeze auth (Blade)
 - [x] **Phase 2** — Teams, team membership, roles, authorization
 - [x] **Phase 3** — Projects & Specifications CRUD
-- [ ] **Phase 4** — Specification version history
+- [x] **Phase 4** — Specification version history
 - [ ] **Phase 5** — Comments
 - [ ] **Phase 6** — OpenAI integration, Jobs, database queue
 - [ ] **Phase 7** — Deployment configuration (Render)
 
 ## Routes
 
-_Grows as each phase lands. Currently reflects Phase 3. All routes below
+_Grows as each phase lands. Currently reflects Phase 4. All routes below
 require authentication (redirect to `/login` if signed out) unless noted
 otherwise._
 
@@ -134,8 +157,17 @@ otherwise._
 | POST | `/projects/{project}/specifications` | `projects.specifications.store` | Creates the specification at version 1. Any team member. |
 | GET | `/specifications/{specification}` | `specifications.show` | Full specification content and current version number. Requires team membership. |
 | GET | `/specifications/{specification}/edit` | `specifications.edit` | Edit form, same fields as create. Any team member. |
-| PUT/PATCH | `/specifications/{specification}` | `specifications.update` | Saves changes. Any team member. |
+| PUT/PATCH | `/specifications/{specification}` | `specifications.update` | Saves changes. Any team member. If the submitted content exactly matches an existing version, nothing is saved yet — the response re-renders the edit page with a confirmation modal instead (see Specification Versions below). |
 | DELETE | `/specifications/{specification}` | `specifications.destroy` | Soft-deletes the specification. Any team member. |
+
+### Specification Versions
+
+| Method | URI | Name | What it shows |
+|---|---|---|---|
+| GET | `/specifications/{specification}/versions` | `specifications.versions.index` | Every version, newest first, with who changed it and when; a compare form; a restore button per non-current version. Requires team membership. |
+| GET | `/specifications/{specification}/versions/{version}` | `specifications.versions.show` | Full content snapshot of one version. Requires team membership. |
+| GET | `/specifications/{specification}/versions/compare?from=&to=` | `specifications.versions.compare` | Side-by-side field-by-field comparison of two versions (changed fields highlighted). Requires team membership. |
+| POST | `/specifications/{specification}/versions/{version}/restore` | `specifications.versions.restore` | Rewinds `current_version` to that version's number and copies its content back onto the specification. No new version row is created, and nothing is ever deleted — every version stays in the table whether or not it's current. Any team member. |
 
 ## Field Reference
 

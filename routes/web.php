@@ -3,6 +3,7 @@
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\SpecificationController;
+use App\Http\Controllers\SpecificationVersionController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\TeamMemberController;
 use Illuminate\Support\Facades\Auth;
@@ -29,6 +30,11 @@ Route::middleware('auth')->group(function () {
 
     Route::resource('teams.projects', ProjectController::class)->shallow();
     Route::resource('projects.specifications', SpecificationController::class)->shallow()->except(['index']);
+
+    Route::get('specifications/{specification}/versions', [SpecificationVersionController::class, 'index'])->name('specifications.versions.index');
+    Route::get('specifications/{specification}/versions/compare', [SpecificationVersionController::class, 'compare'])->name('specifications.versions.compare');
+    Route::get('specifications/{specification}/versions/{version}', [SpecificationVersionController::class, 'show'])->name('specifications.versions.show');
+    Route::post('specifications/{specification}/versions/{version}/restore', [SpecificationVersionController::class, 'restore'])->name('specifications.versions.restore');
 });
 
 require __DIR__.'/auth.php';

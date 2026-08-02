@@ -58,12 +58,76 @@
                 <h3 class="text-lg font-medium text-gray-900">{{ __('Delete Specification') }}</h3>
                 <p class="mt-1 text-sm text-gray-600">{{ __('This cannot be undone.') }}</p>
 
-                <form method="POST" action="{{ route('specifications.destroy', $specification) }}" onsubmit="return confirm('{{ __('Are you sure?') }}')" class="mt-4">
-                    @csrf
-                    @method('DELETE')
-                    <x-danger-button>{{ __('Delete Specification') }}</x-danger-button>
-                </form>
+                <x-danger-button x-data="" x-on:click.prevent="$dispatch('open-modal', 'confirm-specification-deletion')" class="mt-4">
+                    {{ __('Delete Specification') }}
+                </x-danger-button>
             </div>
         </div>
     </div>
+
+    <x-modal name="confirm-specification-deletion" focusable>
+        <form method="POST" action="{{ route('specifications.destroy', $specification) }}" class="p-6">
+            @csrf
+            @method('DELETE')
+
+            <h2 class="text-lg font-medium text-gray-900">
+                {{ __('Delete this specification?') }}
+            </h2>
+
+            <p class="mt-1 text-sm text-gray-600">
+                {{ __('This cannot be undone.') }}
+            </p>
+
+            <div class="mt-6 flex justify-end gap-3">
+                <x-secondary-button type="button" x-on:click="$dispatch('close')">
+                    {{ __('Cancel') }}
+                </x-secondary-button>
+                <x-danger-button type="submit">
+                    {{ __('Delete Specification') }}
+                </x-danger-button>
+            </div>
+        </form>
+    </x-modal>
+
+    @if (session('matched_version_number'))
+        <x-modal name="confirm-restore-match" :show="true" focusable>
+            <div class="p-6">
+                <h2 class="text-lg font-medium text-gray-900">
+                    {{ __('This matches an earlier version') }}
+                </h2>
+
+                <p class="mt-1 text-sm text-gray-600">
+                    {{ __('The content you entered is identical to Version :version. Would you like to restore to it instead of creating a duplicate version?', ['version' => session('matched_version_number')]) }}
+                </p>
+
+                <div class="mt-6 flex justify-end gap-3">
+                    <x-secondary-button type="button" x-on:click="$dispatch('close')">
+                        {{ __('Cancel') }}
+                    </x-secondary-button>
+
+                    <form method="POST" action="{{ route('specifications.versions.restore', [$specification, session('matched_version_id')]) }}">
+                        @csrf
+                        <x-secondary-button type="submit">
+                            {{ __('Restore to Version :version', ['version' => session('matched_version_number')]) }}
+                        </x-secondary-button>
+                    </form>
+
+                    <form method="POST" action="{{ route('specifications.update', $specification) }}">
+                        @csrf
+                        @method('PATCH')
+                        <input type="hidden" name="title" value="{{ old('title') }}">
+                        <input type="hidden" name="description" value="{{ old('description') }}">
+                        <input type="hidden" name="goals" value="{{ old('goals') }}">
+                        <input type="hidden" name="scope" value="{{ old('scope') }}">
+                        <input type="hidden" name="functional_requirements" value="{{ old('functional_requirements') }}">
+                        <input type="hidden" name="non_functional_requirements" value="{{ old('non_functional_requirements') }}">
+                        <input type="hidden" name="force_new_version" value="1">
+                        <x-primary-button type="submit">
+                            {{ __('Save as new version anyway') }}
+                        </x-primary-button>
+                    </form>
+                </div>
+            </div>
+        </x-modal>
+    @endif
 </x-app-layout>

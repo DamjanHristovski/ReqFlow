@@ -9,11 +9,16 @@
                     &larr; {{ $specification->project->name }}
                 </a>
             </div>
-            @can('update', $specification)
-                <a href="{{ route('specifications.edit', $specification) }}">
-                    <x-secondary-button>{{ __('Edit') }}</x-secondary-button>
+            <div class="flex items-center gap-2">
+                <a href="{{ route('specifications.versions.index', $specification) }}">
+                    <x-secondary-button>{{ __('Version History') }}</x-secondary-button>
                 </a>
-            @endcan
+                @can('update', $specification)
+                    <a href="{{ route('specifications.edit', $specification) }}">
+                        <x-secondary-button>{{ __('Edit') }}</x-secondary-button>
+                    </a>
+                @endcan
+            </div>
         </div>
     </x-slot>
 

@@ -60,13 +60,9 @@
                                 @endcan
 
                                 @if ($member->id === auth()->id() || auth()->user()->can('removeMember', $team))
-                                    <form method="POST" action="{{ route('teams.members.destroy', [$team, $member]) }}" onsubmit="return confirm('{{ __('Are you sure?') }}')">
-                                        @csrf
-                                        @method('DELETE')
-                                        <x-danger-button>
-                                            {{ $member->id === auth()->id() ? __('Leave') : __('Remove') }}
-                                        </x-danger-button>
-                                    </form>
+                                    <x-danger-button x-data="" x-on:click.prevent="$dispatch('open-modal', 'confirm-remove-member-{{ $member->id }}')">
+                                        {{ $member->id === auth()->id() ? __('Leave') : __('Remove') }}
+                                    </x-danger-button>
                                 @endif
                             </div>
                         </li>
@@ -90,4 +86,34 @@
             @endcan
         </div>
     </div>
+
+    @foreach ($team->members as $member)
+        @if ($member->id === auth()->id() || auth()->user()->can('removeMember', $team))
+            <x-modal name="confirm-remove-member-{{ $member->id }}" focusable>
+                <form method="POST" action="{{ route('teams.members.destroy', [$team, $member]) }}" class="p-6">
+                    @csrf
+                    @method('DELETE')
+
+                    <h2 class="text-lg font-medium text-gray-900">
+                        {{ $member->id === auth()->id() ? __('Leave this team?') : __("Remove :name from the team?", ['name' => $member->name]) }}
+                    </h2>
+
+                    <p class="mt-1 text-sm text-gray-600">
+                        {{ $member->id === auth()->id()
+                            ? __("You'll lose access to this team's projects and specifications.")
+                            : __("They'll lose access to this team's projects and specifications.") }}
+                    </p>
+
+                    <div class="mt-6 flex justify-end gap-3">
+                        <x-secondary-button type="button" x-on:click="$dispatch('close')">
+                            {{ __('Cancel') }}
+                        </x-secondary-button>
+                        <x-danger-button type="submit">
+                            {{ $member->id === auth()->id() ? __('Leave') : __('Remove') }}
+                        </x-danger-button>
+                    </div>
+                </form>
+            </x-modal>
+        @endif
+    @endforeach
 </x-app-layout>
