@@ -17,11 +17,11 @@ specifications.
 | Queue      | Laravel database queue driver, background Jobs     |
 | AI         | `openai-php/laravel`, called only from queued Jobs, never from controllers |
 | VCS        | GitHub                                             |
-| Deployment | Render                                             |
+| Deployment | None — dockerized for local demo only (faculty project, see Phase 7) |
 
 ## Architecture Overview
 
-_Grows as each phase lands. Currently reflects Phase 6._
+_Grows as each phase lands. Currently reflects Phase 7._
 
 - **Controllers → Form Requests → Models** for standard CRUD.
 - **Controllers never call OpenAI directly.** The flow is
@@ -117,6 +117,26 @@ _Grows as each phase lands. Currently reflects Phase 6._
   full-page-reload interactions after all phases are complete.
 - Postgres runs only in Docker; PHP/artisan run natively on the host — see
   [Local Development](#local-development) below.
+- **No cloud hosting.** This is a faculty project, not a production service —
+  Phase 7 dockerizes the *entire* stack (app + queue worker + Postgres) for
+  local presentation purposes only, rather than preparing a Render/cloud
+  deployment. See [Running the Full Stack in Docker](#running-the-full-stack-in-docker)
+  below.
+- **The Docker demo stack is opt-in via a Compose profile** (`--profile demo`),
+  so it doesn't change the behavior of the `docker compose up` command
+  already used throughout local development (Postgres only, unaffected).
+- **`app` and `queue-worker` are two separate containers sharing one
+  Postgres-backed queue** — the same architecture as a real deployment, just
+  running on one machine. Verified for real: dispatched an AI job through the
+  `app` container over HTTP, confirmed the separate `queue-worker` container
+  picked it up, retried it, and marked it failed (no API key configured) —
+  proving the containers actually communicate through the shared database,
+  not just that each one boots.
+- **Migrations run via a dedicated one-shot `migrate` service**, not baked
+  into the app container's startup — `app` and `queue-worker` both wait for
+  it to exit successfully (`depends_on: condition: service_completed_successfully`)
+  before starting, so migrations only ever run once per `docker compose
+  --profile demo up`, never racing across multiple containers.
 
 ## Project Roadmap
 
@@ -126,7 +146,7 @@ _Grows as each phase lands. Currently reflects Phase 6._
 - [x] **Phase 4** — Specification version history
 - [x] **Phase 5** — Comments
 - [x] **Phase 6** — OpenAI integration, Jobs, database queue
-- [ ] **Phase 7** — Deployment configuration (Render)
+- [x] **Phase 7** — Dockerized for local demo (no cloud hosting — faculty project)
 
 ## Routes
 
@@ -384,6 +404,63 @@ docker compose ps        # check status
 > `docker compose down -v` to wipe the volume and reinitialize (destroys
 > local data), or update the credentials inside Postgres directly.
 
-## Deployment
+## Running the Full Stack in Docker
 
-Deployment configuration for Render lands in Phase 7.
+This project is a faculty assignment, not a hosted service — there is no
+cloud deployment. Instead, the entire application (web app + queue worker +
+Postgres) can run in Docker on your own machine for a self-contained
+presentation, with no dependency on XAMPP or a local PHP install.
+
+This is **opt-in** via a Compose profile, so it doesn't change anything about
+the `docker compose up` command already used for local development (that
+still only starts Postgres, exactly as before).
+
+```bash
+# Build the app image (only needed once, or after changing app code)
+docker compose --profile demo build
+
+# Start everything: Postgres, migrations, the web app, and the queue worker
+docker compose --profile demo up -d
+
+# App is now at:
+http://127.0.0.1:8080
+
+# Watch the queue worker process AI jobs in real time
+docker compose --profile demo logs -f queue-worker
+
+# Stop everything
+docker compose --profile demo down
+```
+
+### What happens on `up`
+
+1. **`postgres`** starts and waits until healthy (`pg_isready`).
+2. **`migrate`** runs `php artisan migrate --force` once and exits — `app`
+   and `queue-worker` both wait for it to exit successfully before starting,
+   so migrations never run more than once or race across containers.
+3. **`app`** serves the web app on port 8080 (mapped from container port 80).
+4. **`queue-worker`** runs `php artisan queue:work` continuously, so AI
+   requests dispatched through `app` actually get processed — the two are
+   separate containers communicating only through the shared Postgres queue,
+   the same architecture a real deployment would use.
+
+### Notes
+
+- Inside the Docker network, Postgres is reachable at hostname `postgres`,
+  not `127.0.0.1` — the `app`, `migrate`, and `queue-worker` services
+  override `DB_HOST`/`DB_PORT` accordingly; your `.env` file itself doesn't
+  need to change (it's still read for everything else — `APP_KEY`,
+  `OPENAI_API_KEY`, etc. via `env_file`).
+- The Docker image (`Dockerfile`) is a 3-stage build: Composer installs PHP
+  dependencies, then a Node stage builds frontend assets (this must happen
+  **after** Composer — `tailwind.config.js` scans
+  `vendor/laravel/framework/.../resources/views` for class names, so
+  `vendor/` has to exist before `npm run build` runs), then a final
+  `php:8.2-apache` runtime image with `pdo_pgsql`/`pgsql` installed.
+- Port 8080 (not 8000) is used deliberately, so this can run
+  simultaneously with `php artisan serve` (which defaults to 8000) without a
+  port conflict.
+- No AI calls will succeed until you add a real `OPENAI_API_KEY` to `.env`
+  yourself — everything else in the pipeline (dispatch, queue, retry,
+  failure-handling, UI) works regardless, exactly as covered in the AI /
+  OpenAI Setup section above.

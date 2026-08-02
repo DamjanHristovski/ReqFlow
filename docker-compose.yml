@@ -11,6 +11,64 @@ services:
       - "5432:5432"
     volumes:
       - reqflow_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-reqflow}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # The services below only start with `docker compose --profile demo up`.
+  # Plain `docker compose up` behaves exactly as before (Postgres only),
+  # so the existing XAMPP + `php artisan serve` dev workflow is unaffected.
+
+  migrate:
+    profiles: ["demo"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reqflow_migrate
+    command: php artisan migrate --force
+    env_file:
+      - .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app:
+    profiles: ["demo"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reqflow_app
+    ports:
+      - "8080:80"
+    env_file:
+      - .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  queue-worker:
+    profiles: ["demo"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reqflow_queue_worker
+    command: php artisan queue:work --tries=3 --backoff=10,30,60 --sleep=3
+    env_file:
+      - .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   reqflow_postgres_data:
