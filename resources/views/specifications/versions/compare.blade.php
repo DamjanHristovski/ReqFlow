@@ -13,6 +13,14 @@
     <div class="py-12">
         <div class="max-w-6xl mx-auto sm:px-6 lg:px-8">
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
+                @php
+                    $diffs = collect(App\Models\Specification::VERSIONED_FIELDS)->mapWithKeys(
+                        fn ($field) => [$field => \App\Support\TextDiffer::diffToHtml(
+                            $from->content[$field] ?? null,
+                            $to->content[$field] ?? null,
+                        )]
+                    );
+                @endphp
                 <table class="w-full table-fixed">
                     <thead>
                         <tr class="text-left text-sm font-semibold text-gray-700 uppercase tracking-wide">
@@ -24,12 +32,12 @@
                     <tbody class="divide-y divide-gray-200">
                         @foreach (App\Models\Specification::VERSIONED_FIELDS as $field)
                             <tr class="align-top">
-                                <td class="py-3 pr-4 text-sm font-medium text-gray-700">{{ \Illuminate\Support\Str::headline($field) }}</td>
-                                <td class="py-3 pr-4 text-gray-900 whitespace-pre-line {{ ($from->content[$field] ?? null) !== ($to->content[$field] ?? null) ? 'bg-yellow-50' : '' }}">
-                                    {{ $from->content[$field] ?? '—' }}
+                                <td class="py-3 pr-4 text-sm font-medium text-gray-700 align-middle">{{ \Illuminate\Support\Str::headline($field) }}</td>
+                                <td class="py-3 pr-4 text-gray-900 whitespace-pre-line">
+                                    {!! $diffs[$field]['from'] !== '' ? $diffs[$field]['from'] : '&mdash;' !!}
                                 </td>
-                                <td class="py-3 text-gray-900 whitespace-pre-line {{ ($from->content[$field] ?? null) !== ($to->content[$field] ?? null) ? 'bg-yellow-50' : '' }}">
-                                    {{ $to->content[$field] ?? '—' }}
+                                <td class="py-3 text-gray-900 whitespace-pre-line">
+                                    {!! $diffs[$field]['to'] !== '' ? $diffs[$field]['to'] : '&mdash;' !!}
                                 </td>
                             </tr>
                         @endforeach
