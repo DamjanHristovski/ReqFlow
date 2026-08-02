@@ -4,11 +4,16 @@
             <h2 class="font-semibold text-xl text-gray-800 leading-tight">
                 {{ $team->name }}
             </h2>
-            @can('update', $team)
-                <a href="{{ route('teams.edit', $team) }}">
-                    <x-secondary-button>{{ __('Edit Team') }}</x-secondary-button>
+            <div class="flex items-center gap-2">
+                <a href="{{ route('teams.projects.index', $team) }}">
+                    <x-secondary-button>{{ __('View Projects') }}</x-secondary-button>
                 </a>
-            @endcan
+                @can('update', $team)
+                    <a href="{{ route('teams.edit', $team) }}">
+                        <x-secondary-button>{{ __('Edit Team') }}</x-secondary-button>
+                    </a>
+                @endcan
+            </div>
         </div>
     </x-slot>
 

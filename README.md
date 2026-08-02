@@ -21,13 +21,13 @@ specifications.
 
 ## Architecture Overview
 
-_Grows as each phase lands. Currently reflects Phase 2._
+_Grows as each phase lands. Currently reflects Phase 3._
 
 - **Controllers → Form Requests → Models** for standard CRUD.
 - **Controllers never call OpenAI directly.** The intended flow (built out in
   Phase 6) is `Controller → Job → Service (app/Services/OpenAIService.php) →
   OpenAI API`, so AI calls never block an HTTP request.
-- **Authorization** via Laravel Policies (`app/Policies/TeamPolicy.php`),
+- **Authorization** via Laravel Policies (`app/Policies/*Policy.php`),
   registered by Laravel's naming-convention auto-discovery — no manual
   registration needed.
 - **Teams** (`app/Models/Team.php`) are the top-level ownership boundary.
@@ -36,6 +36,15 @@ _Grows as each phase lands. Currently reflects Phase 2._
   belong to many teams with a different role in each. A team can never end up
   without an owner: the last remaining owner can't be demoted or removed
   (enforced in `TeamMemberController`).
+- **Projects belong to a Team; Specifications belong to a Project** — a
+  strict two-level hierarchy (`Team → Project → Specification`), each
+  scoping authorization to its parent. Only the team **owner** can
+  create/edit/delete Projects (structural, deliberately restricted); any team
+  **member** can create/edit/delete Specifications within them (day-to-day
+  work, deliberately open). This asymmetry is intentional, not an oversight.
+- **`specifications.current_version`** exists now (default `1`) but isn't
+  incremented yet — Phase 4 adds the `specification_versions` table and the
+  logic that bumps it on edit.
 - Postgres runs only in Docker; PHP/artisan run natively on the host — see
   [Local Development](#local-development) below.
 
@@ -43,7 +52,7 @@ _Grows as each phase lands. Currently reflects Phase 2._
 
 - [x] **Phase 1** — Project init, Docker Postgres, Laravel Breeze auth (Blade)
 - [x] **Phase 2** — Teams, team membership, roles, authorization
-- [ ] **Phase 3** — Projects & Specifications CRUD
+- [x] **Phase 3** — Projects & Specifications CRUD
 - [ ] **Phase 4** — Specification version history
 - [ ] **Phase 5** — Comments
 - [ ] **Phase 6** — OpenAI integration, Jobs, database queue
@@ -51,7 +60,7 @@ _Grows as each phase lands. Currently reflects Phase 2._
 
 ## Routes
 
-_Grows as each phase lands. Currently reflects Phase 2. All routes below
+_Grows as each phase lands. Currently reflects Phase 3. All routes below
 require authentication (redirect to `/login` if signed out) unless noted
 otherwise._
 
@@ -104,6 +113,56 @@ otherwise._
 | POST | `/teams/{team}/members` | `teams.members.store` | Adds an existing user as a member, by email. Owner only. |
 | PATCH | `/teams/{team}/members/{member}` | `teams.members.update` | Changes a member's role (`owner`/`member`). Owner only; blocked if it would leave the team without an owner. |
 | DELETE | `/teams/{team}/members/{member}` | `teams.members.destroy` | Removes a member (owner only), or lets a member remove themselves (leave team). Blocked if it would remove the last owner. |
+
+### Projects
+
+| Method | URI | Name | What it shows |
+|---|---|---|---|
+| GET | `/teams/{team}/projects` | `teams.projects.index` | Every project belonging to the team. Requires team membership. |
+| GET | `/teams/{team}/projects/create` | `teams.projects.create` | Form to create a project in this team. Owner only. |
+| POST | `/teams/{team}/projects` | `teams.projects.store` | Creates the project. Owner only. |
+| GET | `/projects/{project}` | `projects.show` | Project detail: description, status, and its specifications list. Requires team membership. |
+| GET | `/projects/{project}/edit` | `projects.edit` | Rename, change status, or delete the project. Owner only. |
+| PUT/PATCH | `/projects/{project}` | `projects.update` | Saves changes. Owner only. |
+| DELETE | `/projects/{project}` | `projects.destroy` | Soft-deletes the project (and, on cascade, its specifications). Owner only. |
+
+### Specifications
+
+| Method | URI | Name | What it shows |
+|---|---|---|---|
+| GET | `/projects/{project}/specifications/create` | `projects.specifications.create` | Form to create a specification (title, description, goals, scope, functional/non-functional requirements). Any team member. |
+| POST | `/projects/{project}/specifications` | `projects.specifications.store` | Creates the specification at version 1. Any team member. |
+| GET | `/specifications/{specification}` | `specifications.show` | Full specification content and current version number. Requires team membership. |
+| GET | `/specifications/{specification}/edit` | `specifications.edit` | Edit form, same fields as create. Any team member. |
+| PUT/PATCH | `/specifications/{specification}` | `specifications.update` | Saves changes. Any team member. |
+| DELETE | `/specifications/{specification}` | `specifications.destroy` | Soft-deletes the specification. Any team member. |
+
+## Field Reference
+
+### Project Form
+
+| Field | Required? | What it's for |
+|---|---|---|
+| Name | Required | The project's identifying name within the team. |
+| Description | Optional | Free-text summary of what the project is / why it exists. |
+| Status | Required | Lifecycle stage — one of Planning, In Progress, Completed, On Hold. |
+
+### Specification Form
+
+| Field | Required? | What it's for |
+|---|---|---|
+| Title | Required | The specification's identifying name within the project. |
+| Description | Optional | Short free-text summary of what this specification covers. |
+| Goals | Optional | The outcome this specification is trying to achieve — *why* it exists. |
+| Scope | Optional | The boundary of what's included and explicitly excluded — *what's in, what's out* (e.g. "covers email/password login; OAuth is a separate spec"). |
+| Functional Requirements | Optional | The concrete features/behaviors the software must have. |
+| Non-Functional Requirements | Optional | Quality attributes the software must meet (performance, security, availability, etc.), as opposed to specific features. |
+
+All content fields beyond Title/Name are optional by design — specs and
+projects often start as rough drafts and get filled in incrementally
+(especially once AI-assisted drafting lands in Phase 6). Tighten any of these
+to `required` in `Store*Request`/`Update*Request` if you'd rather enforce
+completeness up front.
 
 ## Getting Started
 

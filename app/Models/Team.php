@@ -39,4 +39,9 @@ class Team extends Model
     {
         return $this->members()->wherePivot('role', 'owner');
     }
+
+    public function projects(): HasMany
+    {
+        return $this->hasMany(Project::class);
+    }
 }

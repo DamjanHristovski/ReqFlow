@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\SpecificationController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\TeamMemberController;
 use Illuminate\Support\Facades\Auth;
@@ -24,6 +26,9 @@ Route::middleware('auth')->group(function () {
     Route::post('teams/{team}/members', [TeamMemberController::class, 'store'])->name('teams.members.store');
     Route::patch('teams/{team}/members/{member}', [TeamMemberController::class, 'update'])->name('teams.members.update');
     Route::delete('teams/{team}/members/{member}', [TeamMemberController::class, 'destroy'])->name('teams.members.destroy');
+
+    Route::resource('teams.projects', ProjectController::class)->shallow();
+    Route::resource('projects.specifications', SpecificationController::class)->shallow()->except(['index']);
 });
 
 require __DIR__.'/auth.php';
