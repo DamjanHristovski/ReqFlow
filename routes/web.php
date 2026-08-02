@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\CommentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\SpecificationController;
@@ -35,6 +36,9 @@ Route::middleware('auth')->group(function () {
     Route::get('specifications/{specification}/versions/compare', [SpecificationVersionController::class, 'compare'])->name('specifications.versions.compare');
     Route::get('specifications/{specification}/versions/{version}', [SpecificationVersionController::class, 'show'])->name('specifications.versions.show');
     Route::post('specifications/{specification}/versions/{version}/restore', [SpecificationVersionController::class, 'restore'])->name('specifications.versions.restore');
+
+    Route::post('specifications/{specification}/comments', [CommentController::class, 'store'])->name('comments.store');
+    Route::delete('comments/{comment}', [CommentController::class, 'destroy'])->name('comments.destroy');
 });
 
 require __DIR__.'/auth.php';

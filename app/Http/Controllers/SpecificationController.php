@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreSpecificationRequest;
 use App\Http\Requests\UpdateSpecificationRequest;
+use App\Models\Comment;
 use App\Models\Project;
 use App\Models\Specification;
 use App\Services\SpecificationVersionService;
@@ -35,7 +36,10 @@ class SpecificationController extends Controller
     {
         $this->authorize('view', $specification);
 
-        return view('specifications.show', compact('specification'));
+        $allComments = $specification->comments()->with('user')->get();
+        $comments = Comment::buildTree($allComments);
+
+        return view('specifications.show', compact('specification', 'comments', 'allComments'));
     }
 
     public function edit(Specification $specification)

@@ -21,7 +21,7 @@ specifications.
 
 ## Architecture Overview
 
-_Grows as each phase lands. Currently reflects Phase 4._
+_Grows as each phase lands. Currently reflects Phase 5._
 
 - **Controllers → Form Requests → Models** for standard CRUD.
 - **Controllers never call OpenAI directly.** The intended flow (built out in
@@ -68,6 +68,26 @@ _Grows as each phase lands. Currently reflects Phase 4._
   Version X — restore instead?") and chooses between restoring to that
   version or saving as a new version anyway (`force_new_version` bypasses
   the check on the resubmit).
+- **Comments belong to a Specification** and are visible inline on its show
+  page. Any team member can post one (same rule as Specifications); deleting
+  one is **author-only** — unlike Projects/Specifications, being the team
+  **owner** grants no extra power here, matching the brief's literal "delete
+  own comments" wording. Comments use a hard delete (no soft-delete recovery
+  story) and are entirely separate from the versioning system — they're not
+  part of a specification's content snapshot.
+- **Comments are threaded, to unlimited depth**, using `comments.parent_id`
+  (a self-referencing FK). `Comment::buildTree()` fetches every comment for a
+  specification in a single flat query, then assembles the whole reply tree
+  in memory — no N+1 regardless of nesting depth. Top-level comments sort
+  newest-first; replies within a thread sort chronologically. Rendering is a
+  self-recursive Blade component (`resources/views/components/comment.blade.php`).
+  Replying is allowed at any depth. Deleting a comment cascades to its entire
+  reply subtree (a direct consequence of `parent_id`'s `cascadeOnDelete()`) —
+  the confirmation modal warns how many replies will go with it.
+- **"View replies (N)" only appears on top-level comments** and, once
+  clicked, reveals the *entire* subtree at once — nested replies don't get
+  their own individual collapse toggle. `N` counts all descendants
+  (children, grandchildren, ...), not just direct replies.
 - Postgres runs only in Docker; PHP/artisan run natively on the host — see
   [Local Development](#local-development) below.
 
@@ -77,13 +97,13 @@ _Grows as each phase lands. Currently reflects Phase 4._
 - [x] **Phase 2** — Teams, team membership, roles, authorization
 - [x] **Phase 3** — Projects & Specifications CRUD
 - [x] **Phase 4** — Specification version history
-- [ ] **Phase 5** — Comments
+- [x] **Phase 5** — Comments
 - [ ] **Phase 6** — OpenAI integration, Jobs, database queue
 - [ ] **Phase 7** — Deployment configuration (Render)
 
 ## Routes
 
-_Grows as each phase lands. Currently reflects Phase 4. All routes below
+_Grows as each phase lands. Currently reflects Phase 5. All routes below
 require authentication (redirect to `/login` if signed out) unless noted
 otherwise._
 
@@ -155,7 +175,7 @@ otherwise._
 |---|---|---|---|
 | GET | `/projects/{project}/specifications/create` | `projects.specifications.create` | Form to create a specification (title, description, goals, scope, functional/non-functional requirements). Any team member. |
 | POST | `/projects/{project}/specifications` | `projects.specifications.store` | Creates the specification at version 1. Any team member. |
-| GET | `/specifications/{specification}` | `specifications.show` | Full specification content and current version number. Requires team membership. |
+| GET | `/specifications/{specification}` | `specifications.show` | Full specification content, current version number, and its comments (with an add-comment form). Requires team membership. |
 | GET | `/specifications/{specification}/edit` | `specifications.edit` | Edit form, same fields as create. Any team member. |
 | PUT/PATCH | `/specifications/{specification}` | `specifications.update` | Saves changes. Any team member. If the submitted content exactly matches an existing version, nothing is saved yet — the response re-renders the edit page with a confirmation modal instead (see Specification Versions below). |
 | DELETE | `/specifications/{specification}` | `specifications.destroy` | Soft-deletes the specification. Any team member. |
@@ -168,6 +188,13 @@ otherwise._
 | GET | `/specifications/{specification}/versions/{version}` | `specifications.versions.show` | Full content snapshot of one version. Requires team membership. |
 | GET | `/specifications/{specification}/versions/compare?from=&to=` | `specifications.versions.compare` | Side-by-side field-by-field comparison of two versions (changed fields highlighted). Requires team membership. |
 | POST | `/specifications/{specification}/versions/{version}/restore` | `specifications.versions.restore` | Rewinds `current_version` to that version's number and copies its content back onto the specification. No new version row is created, and nothing is ever deleted — every version stays in the table whether or not it's current. Any team member. |
+
+### Comments
+
+| Method | URI | Name | What it shows |
+|---|---|---|---|
+| POST | `/specifications/{specification}/comments` | `comments.store` | Adds a comment to the specification, or a reply if `parent_id` is set (must reference an existing comment on the same specification). Any team member. |
+| DELETE | `/comments/{comment}` | `comments.destroy` | Deletes a comment, and cascades to delete its entire reply subtree. **Author only** — even the team owner can't delete someone else's comment. |
 
 ## Field Reference
 
@@ -195,6 +222,13 @@ projects often start as rough drafts and get filled in incrementally
 (especially once AI-assisted drafting lands in Phase 6). Tighten any of these
 to `required` in `Store*Request`/`Update*Request` if you'd rather enforce
 completeness up front.
+
+### Comment Form
+
+| Field | Required? | What it's for |
+|---|---|---|
+| Body | Required, max 2000 chars | The comment text. Plain text only — no rich formatting or Markdown. |
+| Parent (`parent_id`) | Optional, hidden field | Set only by the "Reply" form, not the top-level "Add a comment" form. Makes the comment a reply, nested under the given comment. |
 
 ## Getting Started
 

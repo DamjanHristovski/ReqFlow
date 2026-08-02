@@ -47,4 +47,9 @@ class Specification extends Model
     {
         return $this->hasMany(SpecificationVersion::class);
     }
+
+    public function comments(): HasMany
+    {
+        return $this->hasMany(Comment::class);
+    }
 }
