@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreSpecificationRequest;
 use App\Http\Requests\UpdateSpecificationRequest;
+use App\Models\AiRequest;
 use App\Models\Comment;
 use App\Models\Project;
 use App\Models\Specification;
@@ -39,14 +40,26 @@ class SpecificationController extends Controller
         $allComments = $specification->comments()->with('user')->get();
         $comments = Comment::buildTree($allComments);
 
-        return view('specifications.show', compact('specification', 'comments', 'allComments'));
+        $latestNextSteps = $specification->aiRequests()
+            ->where('type', AiRequest::TYPE_GENERATE_NEXT_STEPS)
+            ->latest()
+            ->first();
+
+        return view('specifications.show', compact('specification', 'comments', 'allComments', 'latestNextSteps'));
     }
 
     public function edit(Specification $specification)
     {
         $this->authorize('update', $specification);
 
-        return view('specifications.edit', compact('specification'));
+        $latestAiRequests = $specification->aiRequests()
+            ->where('type', AiRequest::TYPE_IMPROVE_TEXT)
+            ->latest()
+            ->get()
+            ->unique('field')
+            ->keyBy('field');
+
+        return view('specifications.edit', compact('specification', 'latestAiRequests'));
     }
 
     public function update(UpdateSpecificationRequest $request, Specification $specification, SpecificationVersionService $versions)

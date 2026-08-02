@@ -60,6 +60,30 @@
             </div>
 
             <div class="mt-6 bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900">{{ __('AI Next Steps') }}</h3>
+                    @can('update', $specification)
+                        <form method="POST" action="{{ route('ai.generate-next-steps', $specification) }}">
+                            @csrf
+                            <x-secondary-button type="submit">{{ __('Generate Next Steps') }}</x-secondary-button>
+                        </form>
+                    @endcan
+                </div>
+
+                @if ($latestNextSteps)
+                    @if ($latestNextSteps->isPending() || $latestNextSteps->isProcessing())
+                        <p class="text-sm text-gray-600">{{ __('AI is analyzing this specification — refresh in a moment.') }}</p>
+                    @elseif ($latestNextSteps->isFailed())
+                        <p class="text-sm text-red-700">{{ __('AI request failed: :error', ['error' => $latestNextSteps->error_message]) }}</p>
+                    @elseif ($latestNextSteps->isCompleted())
+                        <p class="text-gray-900 whitespace-pre-line">{{ $latestNextSteps->response }}</p>
+                    @endif
+                @else
+                    <p class="text-gray-600">{{ __('No next-steps analysis yet.') }}</p>
+                @endif
+            </div>
+
+            <div class="mt-6 bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
                 <h3 class="text-lg font-medium text-gray-900 mb-4">{{ __('Comments') }}</h3>
 
                 @if ($comments->isEmpty())

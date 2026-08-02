@@ -18,40 +18,35 @@
                         <x-input-error :messages="$errors->get('title')" class="mt-2" />
                     </div>
 
-                    <div class="mt-4">
-                        <x-input-label for="description" :value="__('Description')" />
-                        <textarea id="description" name="description" rows="3" class="block mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">{{ old('description', $specification->description) }}</textarea>
-                        <x-input-error :messages="$errors->get('description')" class="mt-2" />
-                    </div>
+                    <x-ai-improvable-field field="description" :label="__('Description')" :specification="$specification" />
 
-                    <div class="mt-4">
-                        <x-input-label for="goals" :value="__('Goals')" />
-                        <textarea id="goals" name="goals" rows="3" class="block mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">{{ old('goals', $specification->goals) }}</textarea>
-                        <x-input-error :messages="$errors->get('goals')" class="mt-2" />
-                    </div>
+                    <x-ai-improvable-field field="goals" :label="__('Goals')" :specification="$specification" />
 
-                    <div class="mt-4">
-                        <x-input-label for="scope" :value="__('Scope')" />
-                        <textarea id="scope" name="scope" rows="3" class="block mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">{{ old('scope', $specification->scope) }}</textarea>
-                        <x-input-error :messages="$errors->get('scope')" class="mt-2" />
-                    </div>
+                    <x-ai-improvable-field field="scope" :label="__('Scope')" :specification="$specification" />
 
-                    <div class="mt-4">
-                        <x-input-label for="functional_requirements" :value="__('Functional Requirements')" />
-                        <textarea id="functional_requirements" name="functional_requirements" rows="4" class="block mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">{{ old('functional_requirements', $specification->functional_requirements) }}</textarea>
-                        <x-input-error :messages="$errors->get('functional_requirements')" class="mt-2" />
-                    </div>
+                    <x-ai-improvable-field field="functional_requirements" :label="__('Functional Requirements')" :rows="4" :specification="$specification" />
 
-                    <div class="mt-4">
-                        <x-input-label for="non_functional_requirements" :value="__('Non-Functional Requirements')" />
-                        <textarea id="non_functional_requirements" name="non_functional_requirements" rows="4" class="block mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">{{ old('non_functional_requirements', $specification->non_functional_requirements) }}</textarea>
-                        <x-input-error :messages="$errors->get('non_functional_requirements')" class="mt-2" />
-                    </div>
+                    <x-ai-improvable-field field="non_functional_requirements" :label="__('Non-Functional Requirements')" :rows="4" :specification="$specification" />
 
                     <div class="flex items-center justify-end mt-4">
                         <x-primary-button>{{ __('Save') }}</x-primary-button>
                     </div>
                 </form>
+            </div>
+
+            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-2">{{ __('AI Assistance') }}</h3>
+                <p class="text-sm text-gray-600 mb-2">
+                    {{ __('Request an AI-improved rewrite of any field. This runs in the background — refresh the page to check for a result.') }}
+                </p>
+
+                <div class="divide-y divide-gray-200">
+                    <x-ai-assistance-panel field="description" :label="__('Description')" :specification="$specification" :ai-request="$latestAiRequests->get('description')" />
+                    <x-ai-assistance-panel field="goals" :label="__('Goals')" :specification="$specification" :ai-request="$latestAiRequests->get('goals')" />
+                    <x-ai-assistance-panel field="scope" :label="__('Scope')" :specification="$specification" :ai-request="$latestAiRequests->get('scope')" />
+                    <x-ai-assistance-panel field="functional_requirements" :label="__('Functional Requirements')" :specification="$specification" :ai-request="$latestAiRequests->get('functional_requirements')" />
+                    <x-ai-assistance-panel field="non_functional_requirements" :label="__('Non-Functional Requirements')" :specification="$specification" :ai-request="$latestAiRequests->get('non_functional_requirements')" />
+                </div>
             </div>
 
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">

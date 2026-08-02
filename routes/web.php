@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AiRequestController;
 use App\Http\Controllers\CommentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
@@ -39,6 +40,10 @@ Route::middleware('auth')->group(function () {
 
     Route::post('specifications/{specification}/comments', [CommentController::class, 'store'])->name('comments.store');
     Route::delete('comments/{comment}', [CommentController::class, 'destroy'])->name('comments.destroy');
+
+    Route::post('specifications/{specification}/ai/improve-text', [AiRequestController::class, 'improveText'])->name('ai.improve-text');
+    Route::post('specifications/{specification}/ai/generate-next-steps', [AiRequestController::class, 'generateNextSteps'])->name('ai.generate-next-steps');
+    Route::post('ai-requests/{aiRequest}/apply', [AiRequestController::class, 'apply'])->name('ai-requests.apply');
 });
 
 require __DIR__.'/auth.php';

@@ -21,12 +21,16 @@ specifications.
 
 ## Architecture Overview
 
-_Grows as each phase lands. Currently reflects Phase 5._
+_Grows as each phase lands. Currently reflects Phase 6._
 
 - **Controllers → Form Requests → Models** for standard CRUD.
-- **Controllers never call OpenAI directly.** The intended flow (built out in
-  Phase 6) is `Controller → Job → Service (app/Services/OpenAIService.php) →
-  OpenAI API`, so AI calls never block an HTTP request.
+- **Controllers never call OpenAI directly.** The flow is
+  `Controller → Job → Service (app/Services/OpenAIService.php) → OpenAI API`,
+  so AI calls never block an HTTP request. Controller creates an `ai_requests`
+  row (`status=pending`) and dispatches a Job onto the database queue; the Job
+  (run by `php artisan queue:work`) calls `OpenAIService`, then updates that
+  same row with the response and `status=completed` — or `status=failed` +
+  `error_message` if it exhausts its retries.
 - **Authorization** via Laravel Policies (`app/Policies/*Policy.php`),
   registered by Laravel's naming-convention auto-discovery — no manual
   registration needed.
@@ -49,9 +53,9 @@ _Grows as each phase lands. Currently reflects Phase 5._
   `specifications.current_version`) if the versioned content actually
   changed — a no-op save doesn't spam the history. This logic lives in
   `app/Services/SpecificationVersionService.php`, called explicitly from
-  `SpecificationController` (not a model observer), so the same service can
-  be reused from a Phase 6 AI job without depending on the `Auth` facade
-  inside a model event.
+  `SpecificationController` (not a model observer), so the same service is
+  reusable from the Phase 6 AI job (`AiRequestController::apply()`) without
+  depending on the `Auth` facade inside a model event.
 - **Restoring an old version rewinds the `current_version` pointer** to that
   version's number — it does **not** create a new version row. Nothing is
   ever deleted either: every version stays in the table regardless of
@@ -88,6 +92,29 @@ _Grows as each phase lands. Currently reflects Phase 5._
   clicked, reveals the *entire* subtree at once — nested replies don't get
   their own individual collapse toggle. `N` counts all descendants
   (children, grandchildren, ...), not just direct replies.
+- **"Improve Text" is per-field, not whole-specification.** Each of the 5
+  long-text fields (Description, Goals, Scope, Functional/Non-Functional
+  Requirements — deliberately excluding Title, a short label rather than
+  prose) gets its own "Improve" button and its own `ai_requests` row
+  (`field` column tracks which one). "Generate Next Steps" is the one
+  whole-specification AI action, analyzing all fields together.
+- **AI suggestions are reviewed, not auto-applied.** A completed
+  `improve_text` request shows the suggestion with an "Apply" button that
+  overwrites that field and runs through the normal
+  `SpecificationVersionService` flow — so applying a suggestion creates a
+  new version exactly like a manual edit would (the "matches an existing
+  version" prompt is skipped here; deliberately, since applying an AI
+  suggestion is already a considered, one-click action).
+- **Jobs retry 3 times with backoff `[10, 30, 60]` seconds** before Laravel
+  moves them to `failed_jobs` and calls each job's `failed()` method, which
+  marks the corresponding `ai_requests` row `status=failed` with the
+  exception message in `error_message`. Verified for real (not mocked): ran
+  a job with no `OPENAI_API_KEY` configured through all 3 attempts and
+  confirmed it landed in `failed_jobs` with the `ai_requests` row correctly
+  updated.
+- No auto-refresh/polling on pending AI requests yet — the user checks back
+  by reloading the page. Deliberately deferred; see the note on optimizing
+  full-page-reload interactions after all phases are complete.
 - Postgres runs only in Docker; PHP/artisan run natively on the host — see
   [Local Development](#local-development) below.
 
@@ -98,12 +125,12 @@ _Grows as each phase lands. Currently reflects Phase 5._
 - [x] **Phase 3** — Projects & Specifications CRUD
 - [x] **Phase 4** — Specification version history
 - [x] **Phase 5** — Comments
-- [ ] **Phase 6** — OpenAI integration, Jobs, database queue
+- [x] **Phase 6** — OpenAI integration, Jobs, database queue
 - [ ] **Phase 7** — Deployment configuration (Render)
 
 ## Routes
 
-_Grows as each phase lands. Currently reflects Phase 5. All routes below
+_Grows as each phase lands. Currently reflects Phase 6. All routes below
 require authentication (redirect to `/login` if signed out) unless noted
 otherwise._
 
@@ -196,6 +223,14 @@ otherwise._
 | POST | `/specifications/{specification}/comments` | `comments.store` | Adds a comment to the specification, or a reply if `parent_id` is set (must reference an existing comment on the same specification). Any team member. |
 | DELETE | `/comments/{comment}` | `comments.destroy` | Deletes a comment, and cascades to delete its entire reply subtree. **Author only** — even the team owner can't delete someone else's comment. |
 
+### AI Assistance
+
+| Method | URI | Name | What it shows |
+|---|---|---|---|
+| POST | `/specifications/{specification}/ai/improve-text` | `ai.improve-text` | Queues an `ImproveSpecificationTextJob` for one field (`field` param, one of the 5 improvable fields). No-ops with a flash message if the field is currently empty. Any team member. |
+| POST | `/specifications/{specification}/ai/generate-next-steps` | `ai.generate-next-steps` | Queues a `GenerateNextStepsJob` analyzing the whole specification. Any team member. |
+| POST | `/ai-requests/{aiRequest}/apply` | `ai-requests.apply` | Applies a completed `improve_text` suggestion to its field, running it through the normal versioning flow. 404s if the request isn't a completed `improve_text`. Any team member. |
+
 ## Field Reference
 
 ### Project Form
@@ -218,10 +253,11 @@ otherwise._
 | Non-Functional Requirements | Optional | Quality attributes the software must meet (performance, security, availability, etc.), as opposed to specific features. |
 
 All content fields beyond Title/Name are optional by design — specs and
-projects often start as rough drafts and get filled in incrementally
-(especially once AI-assisted drafting lands in Phase 6). Tighten any of these
-to `required` in `Store*Request`/`Update*Request` if you'd rather enforce
-completeness up front.
+projects often start as rough drafts and get filled in incrementally,
+especially now that AI-assisted drafting (Phase 6) can improve a field after
+the fact. Tighten any of these to `required` in
+`Store*Request`/`Update*Request` if you'd rather enforce completeness up
+front.
 
 ### Comment Form
 
@@ -280,13 +316,31 @@ Run these in separate terminals (or your own process manager):
 ```bash
 php artisan serve        # app at http://127.0.0.1:8000
 npm run dev               # Vite, hot-reloads Blade/CSS/JS changes
-php artisan queue:listen  # background Jobs (needed from Phase 6 onward)
+php artisan queue:listen  # background Jobs — required for AI features (Phase 6) to do anything
 ```
 
 > **Windows note:** the Composer `dev` script (`composer run dev`) bundles in
 > `laravel/pail` for log tailing, which requires the `pcntl` extension. `pcntl`
 > is not available on Windows PHP builds, so that combined script will fail
 > on Windows — run the commands above individually instead.
+
+### AI / OpenAI Setup
+
+AI features ("Improve" per-field, "Generate Next Steps") need a real OpenAI
+API key to do anything beyond queuing a request that will fail. Get one at
+https://platform.openai.com, then add it to your own `.env` — never commit
+it, and don't paste it into a chat/AI assistant session either:
+
+```
+OPENAI_API_KEY=sk-...
+```
+
+Without a key, requests still queue and process normally, but the job fails
+after 3 retries (backoff `10s, 30s, 60s`) and the `ai_requests` row ends up
+`status=failed` with the actual API error message — the UI surfaces this on
+the specification's edit/show page rather than failing silently. This is by
+design: the whole pipeline (dispatch → queue → retry → failure-handling → UI)
+works and is tested independent of whether a key is configured.
 
 ### IDE Helper
 

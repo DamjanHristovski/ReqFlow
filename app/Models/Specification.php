@@ -21,6 +21,18 @@ class Specification extends Model
         'non_functional_requirements',
     ];
 
+    /**
+     * Long-text content fields eligible for AI "Improve" — deliberately
+     * excludes title, which is a short identifying label rather than prose.
+     */
+    public const IMPROVABLE_FIELDS = [
+        'description',
+        'goals',
+        'scope',
+        'functional_requirements',
+        'non_functional_requirements',
+    ];
+
     protected $fillable = [
         'project_id',
         'title',
@@ -51,5 +63,10 @@ class Specification extends Model
     public function comments(): HasMany
     {
         return $this->hasMany(Comment::class);
+    }
+
+    public function aiRequests(): HasMany
+    {
+        return $this->hasMany(AiRequest::class);
     }
 }
