@@ -28,7 +28,7 @@ class GenerateNextStepsJob implements ShouldQueue
     {
         $this->aiRequest->update(['status' => AiRequest::STATUS_PROCESSING]);
 
-        $response = $openAI->generateNextSteps($this->aiRequest->specification);
+        $response = $openAI->generateNextSteps($this->aiRequest->subject());
 
         $this->aiRequest->update([
             'status' => AiRequest::STATUS_COMPLETED,

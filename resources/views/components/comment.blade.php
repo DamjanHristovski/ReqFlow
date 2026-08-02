@@ -1,4 +1,12 @@
-@props(['comment', 'specification', 'depth' => 0])
+@props(['comment', 'commentable', 'depth' => 0])
+
+@php
+    $storeRouteName = match (true) {
+        $commentable instanceof \App\Models\Specification => 'comments.store',
+        $commentable instanceof \App\Models\UserStory => 'user-stories.comments.store',
+        $commentable instanceof \App\Models\AcceptanceCriterion => 'acceptance-criteria.comments.store',
+    };
+@endphp
 
 <li class="py-3">
     <div class="flex justify-between items-start gap-4">
@@ -9,14 +17,14 @@
             </div>
             <p class="mt-1 text-gray-900 whitespace-pre-line">{{ $comment->body }}</p>
 
-            @can('create', [App\Models\Comment::class, $specification])
+            @can('create', [App\Models\Comment::class, $commentable])
                 <div class="mt-1" x-data="{ showReplyForm: false }">
                     <button type="button" class="text-sm text-indigo-600 hover:underline" x-on:click="showReplyForm = ! showReplyForm">
                         {{ __('Reply') }}
                     </button>
 
                     <div x-show="showReplyForm" x-cloak class="mt-2">
-                        <form method="POST" action="{{ route('comments.store', $specification) }}">
+                        <form method="POST" action="{{ route($storeRouteName, $commentable) }}">
                             @csrf
                             <input type="hidden" name="parent_id" value="{{ $comment->id }}">
                             <textarea name="body" rows="2" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="{{ __('Write a reply...') }}"></textarea>
@@ -46,14 +54,14 @@
 
                 <ul x-show="showReplies" x-cloak class="mt-3 ms-6 space-y-3 border-l-2 border-gray-100 pl-4">
                     @foreach ($comment->replies as $reply)
-                        <x-comment :comment="$reply" :specification="$specification" :depth="$depth + 1" />
+                        <x-comment :comment="$reply" :commentable="$commentable" :depth="$depth + 1" />
                     @endforeach
                 </ul>
             </div>
         @else
             <ul class="mt-3 ms-6 space-y-3 border-l-2 border-gray-100 pl-4">
                 @foreach ($comment->replies as $reply)
-                    <x-comment :comment="$reply" :specification="$specification" :depth="$depth + 1" />
+                    <x-comment :comment="$reply" :commentable="$commentable" :depth="$depth + 1" />
                 @endforeach
             </ul>
         @endif

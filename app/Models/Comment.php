@@ -14,6 +14,8 @@ class Comment extends Model
 
     protected $fillable = [
         'specification_id',
+        'user_story_id',
+        'acceptance_criterion_id',
         'user_id',
         'parent_id',
         'body',
@@ -22,6 +24,21 @@ class Comment extends Model
     public function specification(): BelongsTo
     {
         return $this->belongsTo(Specification::class);
+    }
+
+    public function userStory(): BelongsTo
+    {
+        return $this->belongsTo(UserStory::class);
+    }
+
+    public function acceptanceCriterion(): BelongsTo
+    {
+        return $this->belongsTo(AcceptanceCriterion::class);
+    }
+
+    public function commentable(): Specification|UserStory|AcceptanceCriterion
+    {
+        return $this->specification ?? $this->userStory ?? $this->acceptanceCriterion;
     }
 
     public function user(): BelongsTo

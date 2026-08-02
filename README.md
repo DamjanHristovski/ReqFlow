@@ -247,7 +247,7 @@ otherwise._
 
 | Method | URI | Name | What it shows |
 |---|---|---|---|
-| POST | `/specifications/{specification}/ai/improve-text` | `ai.improve-text` | Queues an `ImproveSpecificationTextJob` for one field (`field` param, one of the 5 improvable fields). No-ops with a flash message if the field is currently empty. Any team member. |
+| POST | `/specifications/{specification}/ai/improve-text` | `ai.improve-text` | Queues an `ImproveTextJob` for one field (`field` param, one of the 5 improvable fields). No-ops with a flash message if the field is currently empty. Any team member. |
 | POST | `/specifications/{specification}/ai/generate-next-steps` | `ai.generate-next-steps` | Queues a `GenerateNextStepsJob` analyzing the whole specification. Any team member. |
 | POST | `/ai-requests/{aiRequest}/apply` | `ai-requests.apply` | Applies a completed `improve_text` suggestion to its field, running it through the normal versioning flow. 404s if the request isn't a completed `improve_text`. Any team member. |
 

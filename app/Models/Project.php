@@ -13,8 +13,11 @@ class Project extends Model
     use HasFactory, SoftDeletes;
 
     public const STATUS_PLANNING = 'planning';
+
     public const STATUS_IN_PROGRESS = 'in_progress';
+
     public const STATUS_COMPLETED = 'completed';
+
     public const STATUS_ON_HOLD = 'on_hold';
 
     public const STATUSES = [
@@ -52,5 +55,10 @@ class Project extends Model
     public function specifications(): HasMany
     {
         return $this->hasMany(Specification::class);
+    }
+
+    public function userStories(): HasMany
+    {
+        return $this->hasMany(UserStory::class);
     }
 }

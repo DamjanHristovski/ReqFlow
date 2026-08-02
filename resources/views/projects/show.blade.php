@@ -52,6 +52,32 @@
                     </ul>
                 @endif
             </div>
+
+            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-medium text-gray-900">{{ __('User Stories') }}</h3>
+                    @can('create', [App\Models\UserStory::class, $project])
+                        <a href="{{ route('projects.user-stories.create', $project) }}">
+                            <x-primary-button>{{ __('New User Story') }}</x-primary-button>
+                        </a>
+                    @endcan
+                </div>
+
+                @if ($project->userStories->isEmpty())
+                    <p class="text-gray-600">{{ __('No user stories yet.') }}</p>
+                @else
+                    <ul class="divide-y divide-gray-200">
+                        @foreach ($project->userStories as $userStory)
+                            <li class="py-3 flex justify-between items-center">
+                                <a href="{{ route('user-stories.show', $userStory) }}" class="text-gray-900 hover:underline">
+                                    {{ $userStory->title }}
+                                </a>
+                                <span class="text-xs text-gray-500">v{{ $userStory->current_version }}</span>
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+            </div>
         </div>
     </div>
 </x-app-layout>

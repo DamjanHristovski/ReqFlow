@@ -40,7 +40,7 @@ class ProjectController extends Controller
     {
         $this->authorize('view', $project);
 
-        $project->load('specifications');
+        $project->load('specifications', 'userStories');
 
         return view('projects.show', compact('project'));
     }

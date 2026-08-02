@@ -1,9 +1,17 @@
-@props(['field', 'label', 'specification', 'aiRequest' => null])
+@props(['field', 'label', 'model', 'aiRequest' => null])
+
+@php
+    $improveRouteName = match (true) {
+        $model instanceof \App\Models\Specification => 'ai.improve-text',
+        $model instanceof \App\Models\UserStory => 'user-stories.ai.improve-text',
+        $model instanceof \App\Models\AcceptanceCriterion => 'acceptance-criteria.ai.improve-text',
+    };
+@endphp
 
 <div class="py-4 first:pt-0 last:pb-0">
     <div class="flex items-center justify-between">
         <span class="text-sm font-medium text-gray-700">{{ $label }}</span>
-        <form method="POST" action="{{ route('ai.improve-text', $specification) }}">
+        <form method="POST" action="{{ route($improveRouteName, $model) }}">
             @csrf
             <input type="hidden" name="field" value="{{ $field }}">
             <x-secondary-button type="submit">{{ __('Improve') }}</x-secondary-button>

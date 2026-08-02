@@ -11,16 +11,22 @@ class AiRequest extends Model
     use HasFactory;
 
     public const TYPE_IMPROVE_TEXT = 'improve_text';
+
     public const TYPE_GENERATE_NEXT_STEPS = 'generate_next_steps';
 
     public const STATUS_PENDING = 'pending';
+
     public const STATUS_PROCESSING = 'processing';
+
     public const STATUS_COMPLETED = 'completed';
+
     public const STATUS_FAILED = 'failed';
 
     protected $fillable = [
         'user_id',
         'specification_id',
+        'user_story_id',
+        'acceptance_criterion_id',
         'type',
         'field',
         'status',
@@ -37,6 +43,21 @@ class AiRequest extends Model
     public function specification(): BelongsTo
     {
         return $this->belongsTo(Specification::class);
+    }
+
+    public function userStory(): BelongsTo
+    {
+        return $this->belongsTo(UserStory::class);
+    }
+
+    public function acceptanceCriterion(): BelongsTo
+    {
+        return $this->belongsTo(AcceptanceCriterion::class);
+    }
+
+    public function subject(): Specification|UserStory|AcceptanceCriterion
+    {
+        return $this->specification ?? $this->userStory ?? $this->acceptanceCriterion;
     }
 
     public function isPending(): bool

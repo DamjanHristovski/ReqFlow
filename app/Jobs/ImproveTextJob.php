@@ -10,7 +10,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Str;
 use Throwable;
 
-class ImproveSpecificationTextJob implements ShouldQueue
+class ImproveTextJob implements ShouldQueue
 {
     use Queueable, SerializesModels;
 

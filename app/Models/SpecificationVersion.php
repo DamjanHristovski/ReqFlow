@@ -12,6 +12,7 @@ class SpecificationVersion extends Model
 
     protected $fillable = [
         'specification_id',
+        'user_story_id',
         'version_number',
         'content',
         'changed_by',
@@ -27,6 +28,16 @@ class SpecificationVersion extends Model
     public function specification(): BelongsTo
     {
         return $this->belongsTo(Specification::class);
+    }
+
+    public function userStory(): BelongsTo
+    {
+        return $this->belongsTo(UserStory::class);
+    }
+
+    public function subject(): Specification|UserStory
+    {
+        return $this->specification ?? $this->userStory;
     }
 
     public function changedBy(): BelongsTo

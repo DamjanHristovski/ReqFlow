@@ -126,8 +126,8 @@ class SpecificationVersionTest extends TestCase
         ]));
 
         $response->assertOk();
-        $response->assertSee('V1 Title');
-        $response->assertSee('V2 Title');
+        $response->assertSeeText('V1 Title');
+        $response->assertSeeText('V2 Title');
     }
 
     public function test_restore_rewinds_the_pointer_without_creating_a_new_version(): void

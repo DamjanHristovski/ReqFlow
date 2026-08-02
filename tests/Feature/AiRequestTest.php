@@ -3,13 +3,15 @@
 namespace Tests\Feature;
 
 use App\Jobs\GenerateNextStepsJob;
-use App\Jobs\ImproveSpecificationTextJob;
+use App\Jobs\ImproveTextJob;
+use App\Models\AcceptanceCriterion;
 use App\Models\AiRequest;
 use App\Models\Project;
 use App\Models\Specification;
 use App\Models\Team;
 use App\Models\TeamMember;
 use App\Models\User;
+use App\Models\UserStory;
 use App\Services\OpenAIService;
 use Exception;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -49,7 +51,7 @@ class AiRequestTest extends TestCase
             'prompt' => 'Users need login',
         ]);
 
-        Queue::assertPushed(ImproveSpecificationTextJob::class);
+        Queue::assertPushed(ImproveTextJob::class);
     }
 
     public function test_improve_text_rejects_an_invalid_field(): void
@@ -72,7 +74,7 @@ class AiRequestTest extends TestCase
             ->assertRedirect();
 
         $this->assertDatabaseCount('ai_requests', 0);
-        Queue::assertNotPushed(ImproveSpecificationTextJob::class);
+        Queue::assertNotPushed(ImproveTextJob::class);
     }
 
     public function test_outsider_cannot_request_improve_text(): void
@@ -86,7 +88,7 @@ class AiRequestTest extends TestCase
             ->post(route('ai.improve-text', $specification), ['field' => 'description'])
             ->assertForbidden();
 
-        Queue::assertNotPushed(ImproveSpecificationTextJob::class);
+        Queue::assertNotPushed(ImproveTextJob::class);
     }
 
     public function test_member_can_request_next_steps(): void
@@ -138,7 +140,7 @@ class AiRequestTest extends TestCase
             'prompt' => 'Users need login',
         ]);
 
-        (new ImproveSpecificationTextJob($aiRequest))->handle(app(OpenAIService::class));
+        (new ImproveTextJob($aiRequest))->handle(app(OpenAIService::class));
 
         $aiRequest->refresh();
         $this->assertTrue($aiRequest->isCompleted());
@@ -178,7 +180,7 @@ class AiRequestTest extends TestCase
             'status' => AiRequest::STATUS_PENDING,
         ]);
 
-        $job = new ImproveSpecificationTextJob($aiRequest);
+        $job = new ImproveTextJob($aiRequest);
         $job->failed(new Exception('OpenAI API unreachable'));
 
         $aiRequest->refresh();
@@ -238,6 +240,88 @@ class AiRequestTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_member_can_request_improve_text_on_a_user_story(): void
+    {
+        Queue::fake();
+        [, , $member, $userStory] = $this->createUserStoryWithOwnerAndMember();
+        $userStory->update(['description' => 'Users need login']);
+
+        $this->actingAs($member)
+            ->post(route('user-stories.ai.improve-text', $userStory), ['field' => 'description'])
+            ->assertRedirect(route('user-stories.edit', $userStory));
+
+        $this->assertDatabaseHas('ai_requests', [
+            'user_story_id' => $userStory->id,
+            'user_id' => $member->id,
+            'type' => AiRequest::TYPE_IMPROVE_TEXT,
+            'field' => 'description',
+            'status' => AiRequest::STATUS_PENDING,
+        ]);
+
+        Queue::assertPushed(ImproveTextJob::class);
+    }
+
+    public function test_member_can_request_next_steps_for_a_user_story(): void
+    {
+        Queue::fake();
+        [, , $member, $userStory] = $this->createUserStoryWithOwnerAndMember();
+
+        $this->actingAs($member)
+            ->post(route('user-stories.ai.generate-next-steps', $userStory))
+            ->assertRedirect(route('user-stories.show', $userStory));
+
+        $this->assertDatabaseHas('ai_requests', [
+            'user_story_id' => $userStory->id,
+            'type' => AiRequest::TYPE_GENERATE_NEXT_STEPS,
+            'status' => AiRequest::STATUS_PENDING,
+        ]);
+
+        Queue::assertPushed(GenerateNextStepsJob::class);
+    }
+
+    public function test_member_can_request_improve_text_on_an_acceptance_criterion(): void
+    {
+        Queue::fake();
+        [, , $member, $acceptanceCriterion] = $this->createAcceptanceCriterionWithOwnerAndMember();
+
+        $this->actingAs($member)
+            ->post(route('acceptance-criteria.ai.improve-text', $acceptanceCriterion), ['field' => 'description'])
+            ->assertRedirect(route('acceptance-criteria.edit', $acceptanceCriterion));
+
+        $this->assertDatabaseHas('ai_requests', [
+            'acceptance_criterion_id' => $acceptanceCriterion->id,
+            'user_id' => $member->id,
+            'type' => AiRequest::TYPE_IMPROVE_TEXT,
+            'field' => 'description',
+            'status' => AiRequest::STATUS_PENDING,
+        ]);
+
+        Queue::assertPushed(ImproveTextJob::class);
+    }
+
+    public function test_member_can_apply_a_completed_suggestion_to_a_user_story(): void
+    {
+        [, , $member, $userStory] = $this->createUserStoryWithOwnerAndMember();
+        $userStory->update(['description' => 'Users need login']);
+        $aiRequest = AiRequest::factory()->create([
+            'specification_id' => null,
+            'user_story_id' => $userStory->id,
+            'user_id' => $member->id,
+            'type' => AiRequest::TYPE_IMPROVE_TEXT,
+            'field' => 'description',
+            'status' => AiRequest::STATUS_COMPLETED,
+            'prompt' => 'Users need login',
+            'response' => 'Users should be able to authenticate securely.',
+        ]);
+
+        $this->actingAs($member)
+            ->post(route('ai-requests.apply', $aiRequest))
+            ->assertRedirect(route('user-stories.edit', $userStory));
+
+        $this->assertSame('Users should be able to authenticate securely.', $userStory->fresh()->description);
+        $this->assertSame(1, $userStory->versions()->count());
+    }
+
     /**
      * @return array{0: Team, 1: User, 2: User, 3: Specification}
      */
@@ -254,5 +338,34 @@ class AiRequestTest extends TestCase
         $specification = Specification::factory()->create(['project_id' => $project->id]);
 
         return [$team, $owner, $member, $specification];
+    }
+
+    /**
+     * @return array{0: Team, 1: User, 2: User, 3: UserStory}
+     */
+    private function createUserStoryWithOwnerAndMember(): array
+    {
+        $owner = User::factory()->create();
+        $team = Team::factory()->create(['created_by' => $owner->id]);
+        $team->teamMembers()->create(['user_id' => $owner->id, 'role' => TeamMember::ROLE_OWNER]);
+
+        $member = User::factory()->create();
+        $team->teamMembers()->create(['user_id' => $member->id, 'role' => TeamMember::ROLE_MEMBER]);
+
+        $project = Project::factory()->create(['team_id' => $team->id]);
+        $userStory = UserStory::factory()->create(['project_id' => $project->id]);
+
+        return [$team, $owner, $member, $userStory];
+    }
+
+    /**
+     * @return array{0: Team, 1: User, 2: User, 3: AcceptanceCriterion}
+     */
+    private function createAcceptanceCriterionWithOwnerAndMember(): array
+    {
+        [$team, $owner, $member, $userStory] = $this->createUserStoryWithOwnerAndMember();
+        $acceptanceCriterion = AcceptanceCriterion::factory()->create(['user_story_id' => $userStory->id]);
+
+        return [$team, $owner, $member, $acceptanceCriterion];
     }
 }
