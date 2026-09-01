@@ -14,6 +14,12 @@ class AiRequest extends Model
 
     public const TYPE_GENERATE_NEXT_STEPS = 'generate_next_steps';
 
+    public const TYPE_IMPORT_PDF = 'import_pdf';
+
+    public const TYPE_GENERATE_USER_STORIES = 'generate_user_stories';
+
+    public const TYPE_GENERATE_ACCEPTANCE_CRITERIA = 'generate_acceptance_criteria';
+
     public const STATUS_PENDING = 'pending';
 
     public const STATUS_PROCESSING = 'processing';
@@ -24,6 +30,7 @@ class AiRequest extends Model
 
     protected $fillable = [
         'user_id',
+        'project_id',
         'specification_id',
         'user_story_id',
         'acceptance_criterion_id',
@@ -38,6 +45,11 @@ class AiRequest extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
     }
 
     public function specification(): BelongsTo
@@ -55,7 +67,7 @@ class AiRequest extends Model
         return $this->belongsTo(AcceptanceCriterion::class);
     }
 
-    public function subject(): Specification|UserStory|AcceptanceCriterion
+    public function subject(): Specification|UserStory|AcceptanceCriterion|null
     {
         return $this->specification ?? $this->userStory ?? $this->acceptanceCriterion;
     }

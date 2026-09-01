@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\AcceptanceCriterionController;
+use App\Http\Controllers\AiImportController;
 use App\Http\Controllers\AiRequestController;
+use App\Http\Controllers\AiSettingsController;
 use App\Http\Controllers\CommentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
@@ -26,6 +28,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    Route::patch('/profile/ai-settings', [AiSettingsController::class, 'update'])->name('ai-settings.update');
+    Route::delete('/profile/ai-settings', [AiSettingsController::class, 'destroy'])->name('ai-settings.destroy');
 
     Route::resource('teams', TeamController::class);
 
@@ -58,10 +63,14 @@ Route::middleware('auth')->group(function () {
     Route::delete('comments/{comment}', [CommentController::class, 'destroy'])->name('comments.destroy');
 
     Route::post('specifications/{specification}/ai/improve-text', [AiRequestController::class, 'improveText'])->name('ai.improve-text');
-    Route::post('specifications/{specification}/ai/generate-next-steps', [AiRequestController::class, 'generateNextSteps'])->name('ai.generate-next-steps');
+    Route::post('specifications/{specification}/ai/generate-next-steps', [AiRequestController::class, 'generateNextStepsForSpecification'])->name('ai.generate-next-steps');
+    Route::post('specifications/{specification}/ai/generate-user-stories', [AiRequestController::class, 'generateUserStories'])->name('ai.generate-user-stories');
     Route::post('user-stories/{userStory}/ai/improve-text', [AiRequestController::class, 'improveTextForUserStory'])->name('user-stories.ai.improve-text');
     Route::post('user-stories/{userStory}/ai/generate-next-steps', [AiRequestController::class, 'generateNextStepsForUserStory'])->name('user-stories.ai.generate-next-steps');
+    Route::post('user-stories/{userStory}/ai/generate-acceptance-criteria', [AiRequestController::class, 'generateAcceptanceCriteria'])->name('user-stories.ai.generate-acceptance-criteria');
     Route::post('acceptance-criteria/{acceptanceCriterion}/ai/improve-text', [AiRequestController::class, 'improveTextForAcceptanceCriterion'])->name('acceptance-criteria.ai.improve-text');
+    Route::post('projects/{project}/ai/import-pdf', [AiImportController::class, 'store'])->name('ai.import-pdf');
+    Route::get('ai-requests/{aiRequest}/status', [AiRequestController::class, 'status'])->name('ai-requests.status');
     Route::post('ai-requests/{aiRequest}/apply', [AiRequestController::class, 'apply'])->name('ai-requests.apply');
 });
 

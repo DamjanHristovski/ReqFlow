@@ -61,4 +61,9 @@ class Project extends Model
     {
         return $this->hasMany(UserStory::class);
     }
+
+    public function aiRequests(): HasMany
+    {
+        return $this->hasMany(AiRequest::class);
+    }
 }

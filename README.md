@@ -15,22 +15,53 @@ specifications.
 | Auth       | Laravel Breeze (Blade stack)                       |
 | Frontend   | Blade templates, server-rendered, Tailwind CSS, Vite — no SPA framework |
 | Queue      | Laravel database queue driver, background Jobs     |
-| AI         | `openai-php/laravel`, called only from queued Jobs, never from controllers |
+| AI         | [Prism](https://prismphp.com) (`prism-php/prism`) — multi-provider (OpenAI + Google Gemini), per-user API keys, called only from queued Jobs, never from controllers |
 | VCS        | GitHub                                             |
 | Deployment | None — dockerized for local demo only (faculty project, see Phase 7) |
 
 ## Architecture Overview
 
-_Grows as each phase lands. Currently reflects Phase 7._
+_Grows as each phase lands. Currently reflects Phase 9._
 
 - **Controllers → Form Requests → Models** for standard CRUD.
-- **Controllers never call OpenAI directly.** The flow is
-  `Controller → Job → Service (app/Services/OpenAIService.php) → OpenAI API`,
+- **Controllers never call the AI provider directly.** The flow is
+  `Controller → Job → Service (app/Services/AiService.php) → Prism → provider API`,
   so AI calls never block an HTTP request. Controller creates an `ai_requests`
   row (`status=pending`) and dispatches a Job onto the database queue; the Job
-  (run by `php artisan queue:work`) calls `OpenAIService`, then updates that
-  same row with the response and `status=completed` — or `status=failed` +
+  (run by `php artisan queue:work`) calls `AiService`, then updates that same
+  row with the response and `status=completed` — or `status=failed` +
   `error_message` if it exhausts its retries.
+- **AI runs through [Prism](https://prismphp.com), not a single vendor SDK.**
+  `AiService` builds a fresh Prism request per call
+  (`Prism::text()` / `Prism::structured()`), and the whole provider coupling is
+  isolated to that one file. Both **OpenAI** and **Google Gemini** are
+  supported; structured features (PDF extraction, user-story / acceptance-criteria
+  generation) use Prism's JSON-schema structured output.
+- **Every AI call uses the acting user's own API key** — there is no global
+  key. The key + provider live on the `users` row (`ai_provider`, and an
+  `encrypted` `ai_api_key`), set under **Profile → AI Settings**, and are
+  injected per request via `->using($provider, $model, ['api_key' => $key])`.
+  A fresh request is built and discarded each call, so nothing credential-bearing
+  is held between jobs. **Every AI action is disabled in the UI (and refused by
+  the controllers) when the user has no key configured.**
+- **AI can generate structured artifacts, not just improve prose.**
+  From a specification, "Generate User Stories" drafts user stories (each with
+  acceptance criteria) into the project; from a user story, "Generate with AI"
+  drafts 3–5 acceptance criteria. A project-level **Import from PDF** sends the
+  uploaded PDF straight to the model (which reads scanned pages and tables
+  visually), runs a triage call that returns the extracted specification plus
+  `has_specification` / `has_user_stories` flags, and fans out a follow-up call
+  per flag. Everything created is an ordinary, editable draft — the user fixes
+  any hallucinations afterward. Prompts live in `resources/prompts/*.txt`
+  (loaded via `app/Support/PromptTemplate.php`), not inline in code.
+- **Generation is dedup-aware.** Before generating, the items that already exist
+  — the project's current user stories, or the story's current acceptance
+  criteria — are passed into the prompt with a "do not repeat these" instruction.
+  So regenerating (or importing into a project that already has stories) adds only
+  genuinely new items, and returns nothing (with a "nothing new to add" message)
+  when the set is already covered. This is deliberately *semantic* dedup — the
+  model catches reworded near-duplicates, which an exact string match never would;
+  it's guidance to the model, not a hard guarantee.
 - **Authorization** via Laravel Policies (`app/Policies/*Policy.php`),
   registered by Laravel's naming-convention auto-discovery — no manual
   registration needed.
@@ -109,9 +140,8 @@ _Grows as each phase lands. Currently reflects Phase 7._
   moves them to `failed_jobs` and calls each job's `failed()` method, which
   marks the corresponding `ai_requests` row `status=failed` with the
   exception message in `error_message`. Verified for real (not mocked): ran
-  a job with no `OPENAI_API_KEY` configured through all 3 attempts and
-  confirmed it landed in `failed_jobs` with the `ai_requests` row correctly
-  updated.
+  a job with an invalid API key through all 3 attempts and confirmed it landed
+  in `failed_jobs` with the `ai_requests` row correctly updated.
 - No auto-refresh/polling on pending AI requests yet — the user checks back
   by reloading the page. Deliberately deferred; see the note on optimizing
   full-page-reload interactions after all phases are complete.
@@ -147,10 +177,13 @@ _Grows as each phase lands. Currently reflects Phase 7._
 - [x] **Phase 5** — Comments
 - [x] **Phase 6** — OpenAI integration, Jobs, database queue
 - [x] **Phase 7** — Dockerized for local demo (no cloud hosting — faculty project)
+- [x] **Phase 8** — User stories & acceptance criteria
+- [x] **Phase 9** — AI on Prism: multi-provider (OpenAI + Gemini), per-user API
+  keys, user-story / acceptance-criteria generation, and PDF import
 
 ## Routes
 
-_Grows as each phase lands. Currently reflects Phase 6. All routes below
+_Grows as each phase lands. Currently reflects Phase 9. All routes below
 require authentication (redirect to `/login` if signed out) unless noted
 otherwise._
 
@@ -185,9 +218,11 @@ otherwise._
 
 | Method | URI | Name | What it shows |
 |---|---|---|---|
-| GET | `/profile` | `profile.edit` | Update name/email, change password, delete account. |
+| GET | `/profile` | `profile.edit` | Update name/email, change password, manage the AI API key, delete account. |
 | PATCH | `/profile` | `profile.update` | Saves name/email changes. |
 | DELETE | `/profile` | `profile.destroy` | Deletes the account (requires password confirmation). |
+| PATCH | `/profile/ai-settings` | `ai-settings.update` | Saves the AI provider + API key (stored encrypted). |
+| DELETE | `/profile/ai-settings` | `ai-settings.destroy` | Removes the stored key, disabling AI features again. |
 
 ### Teams
 
@@ -249,7 +284,17 @@ otherwise._
 |---|---|---|---|
 | POST | `/specifications/{specification}/ai/improve-text` | `ai.improve-text` | Queues an `ImproveTextJob` for one field (`field` param, one of the 5 improvable fields). No-ops with a flash message if the field is currently empty. Any team member. |
 | POST | `/specifications/{specification}/ai/generate-next-steps` | `ai.generate-next-steps` | Queues a `GenerateNextStepsJob` analyzing the whole specification. Any team member. |
+| POST | `/specifications/{specification}/ai/generate-user-stories` | `ai.generate-user-stories` | Queues a `GenerateUserStoriesJob` that drafts user stories (with acceptance criteria) into the project from this spec's content. Any team member. |
+| POST | `/user-stories/{userStory}/ai/improve-text` | `user-stories.ai.improve-text` | Queues an `ImproveTextJob` for the story's `description`. Any team member. |
+| POST | `/user-stories/{userStory}/ai/generate-next-steps` | `user-stories.ai.generate-next-steps` | Queues a `GenerateNextStepsJob` analyzing the user story. Any team member. |
+| POST | `/user-stories/{userStory}/ai/generate-acceptance-criteria` | `user-stories.ai.generate-acceptance-criteria` | Queues a `GenerateAcceptanceCriteriaJob` that drafts 3–5 acceptance criteria for the story. Any team member. |
+| POST | `/acceptance-criteria/{acceptanceCriterion}/ai/improve-text` | `acceptance-criteria.ai.improve-text` | Queues an `ImproveTextJob` for the criterion's `description`. Any team member. |
+| POST | `/projects/{project}/ai/import-pdf` | `ai.import-pdf` | Uploads a PDF and queues an `ImportPdfJob` that extracts a specification and/or user stories into the project (whichever the document contains). Any team member. Requires an AI key. |
 | POST | `/ai-requests/{aiRequest}/apply` | `ai-requests.apply` | Applies a completed `improve_text` suggestion to its field, running it through the normal versioning flow. 404s if the request isn't a completed `improve_text`. Any team member. |
+
+Every AI route above requires the acting user to have an API key configured
+(Profile → AI Settings) — the UI disables the controls and the controllers
+refuse the request otherwise.
 
 ## Field Reference
 
@@ -336,7 +381,7 @@ Run these in separate terminals (or your own process manager):
 ```bash
 php artisan serve        # app at http://127.0.0.1:8000
 npm run dev               # Vite, hot-reloads Blade/CSS/JS changes
-php artisan queue:listen  # background Jobs — required for AI features (Phase 6) to do anything
+php artisan queue:listen  # background Jobs — required for AI features to do anything
 ```
 
 > **Windows note:** the Composer `dev` script (`composer run dev`) bundles in
@@ -344,23 +389,38 @@ php artisan queue:listen  # background Jobs — required for AI features (Phase 
 > is not available on Windows PHP builds, so that combined script will fail
 > on Windows — run the commands above individually instead.
 
-### AI / OpenAI Setup
+### AI Setup (Prism — bring your own key)
 
-AI features ("Improve" per-field, "Generate Next Steps") need a real OpenAI
-API key to do anything beyond queuing a request that will fail. Get one at
-https://platform.openai.com, then add it to your own `.env` — never commit
-it, and don't paste it into a chat/AI assistant session either:
+AI runs on [Prism](https://prismphp.com) and supports **OpenAI** and **Google
+Gemini**. There is **no global API key** — each user supplies their own under
+**Profile → AI Settings**:
+
+1. Sign in and open **Profile**.
+2. In the **AI Settings** card, pick a provider (OpenAI or Google Gemini) and
+   paste your API key (OpenAI: https://platform.openai.com, Gemini:
+   https://aistudio.google.com/apikey).
+3. Save. The key is stored **encrypted** (via Laravel's `encrypted` cast) and
+   from then on is shown only masked (e.g. `••••skyw`), with a **Remove Key**
+   button in place of the input.
+
+Until a key is saved, every AI control is disabled (and the routes refuse the
+request). The queue worker (`php artisan queue:work` / `queue:listen`) must be
+running for any AI job to process. If a key is present but invalid, the job
+still fails gracefully after 3 retries (backoff `10s, 30s, 60s`) and the
+`ai_requests` row ends `status=failed` with the API error — surfaced in the UI
+rather than failing silently.
+
+Optional model overrides (defaults are `gpt-4o-mini` / `gemini-2.0-flash`) live
+in `.env` and are read by `config/ai.php`:
 
 ```
-OPENAI_API_KEY=sk-...
+AI_OPENAI_MODEL=
+AI_GEMINI_MODEL=
 ```
 
-Without a key, requests still queue and process normally, but the job fails
-after 3 retries (backoff `10s, 30s, 60s`) and the `ai_requests` row ends up
-`status=failed` with the actual API error message — the UI surfaces this on
-the specification's edit/show page rather than failing silently. This is by
-design: the whole pipeline (dispatch → queue → retry → failure-handling → UI)
-works and is tested independent of whether a key is configured.
+> **Note:** PDF import and structured generation require a provider/model that
+> accepts document input and JSON-schema structured output — the two defaults
+> above both do.
 
 ### IDE Helper
 
@@ -385,6 +445,40 @@ php artisan test
 Tests run against an in-memory SQLite database (configured in `phpunit.xml`)
 for speed and isolation — this is intentionally separate from the Postgres
 database used for local development.
+
+### Dev Data Seeder
+
+To populate your **local** database with realistic, interconnected sample data
+for clicking around (versions, threaded comments, a shared project), run:
+
+```bash
+php artisan db:seed --class=DevSeeder
+```
+
+It is **opt-in** (nothing runs it automatically — not `migrate`, not the test
+suite), **local-only** (it refuses to run unless `APP_ENV=local`), and
+**idempotent** (re-running is a no-op — it skips if the data already exists). To
+reset from scratch: `php artisan migrate:fresh` then re-run the command above.
+
+**Login credentials** (both verified, password `password`):
+
+| Name | Email | Team role |
+|---|---|---|
+| Ana Petrova | `ana@reqflow.test` | Owner |
+| Boris Ilievski | `boris@reqflow.test` | Member |
+
+**What it creates:**
+
+- Both users in **one shared team** ("Product Squad"), so they both see the same
+  **project** ("Mobile Banking App").
+- **Spec A — "User Authentication":** 3 versions with alternating authors
+  (Ana → Boris → Ana) and a threaded comment discussion (a reply and a
+  reply-to-a-reply).
+- **Spec B — "Payments & Transfers":** 2 versions (Boris, then edited by Ana)
+  with a short comment thread.
+
+Log in as either user to see the shared project; open a spec's **Version
+History** to see the multi-version trail and the inline comment threads.
 
 ### Docker
 
@@ -449,8 +543,8 @@ docker compose --profile demo down
 - Inside the Docker network, Postgres is reachable at hostname `postgres`,
   not `127.0.0.1` — the `app`, `migrate`, and `queue-worker` services
   override `DB_HOST`/`DB_PORT` accordingly; your `.env` file itself doesn't
-  need to change (it's still read for everything else — `APP_KEY`,
-  `OPENAI_API_KEY`, etc. via `env_file`).
+  need to change (it's still read for everything else — `APP_KEY`, optional
+  `AI_*` model overrides, etc. via `env_file`).
 - The Docker image (`Dockerfile`) is a 3-stage build: Composer installs PHP
   dependencies, then a Node stage builds frontend assets (this must happen
   **after** Composer — `tailwind.config.js` scans
@@ -460,7 +554,7 @@ docker compose --profile demo down
 - Port 8080 (not 8000) is used deliberately, so this can run
   simultaneously with `php artisan serve` (which defaults to 8000) without a
   port conflict.
-- No AI calls will succeed until you add a real `OPENAI_API_KEY` to `.env`
-  yourself — everything else in the pipeline (dispatch, queue, retry,
-  failure-handling, UI) works regardless, exactly as covered in the AI /
-  OpenAI Setup section above.
+- No AI calls will succeed until a signed-in user adds their own API key under
+  **Profile → AI Settings** — everything else in the pipeline (dispatch, queue,
+  retry, failure-handling, UI) works regardless, exactly as covered in the
+  AI Setup section above.

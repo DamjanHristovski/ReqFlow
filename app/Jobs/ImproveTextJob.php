@@ -3,7 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\AiRequest;
-use App\Services\OpenAIService;
+use App\Services\AiService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\SerializesModels;
@@ -25,11 +25,12 @@ class ImproveTextJob implements ShouldQueue
         return [10, 30, 60];
     }
 
-    public function handle(OpenAIService $openAI): void
+    public function handle(AiService $ai): void
     {
         $this->aiRequest->update(['status' => AiRequest::STATUS_PROCESSING]);
 
-        $response = $openAI->improveText(
+        $response = $ai->improveText(
+            $this->aiRequest->user,
             Str::headline($this->aiRequest->field),
             $this->aiRequest->prompt
         );

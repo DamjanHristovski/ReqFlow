@@ -37,7 +37,7 @@
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
                 <h3 class="text-lg font-medium text-gray-900 mb-2">{{ __('AI Assistance') }}</h3>
                 <p class="text-sm text-gray-600 mb-2">
-                    {{ __('Request an AI-improved rewrite of any field. This runs in the background — refresh the page to check for a result.') }}
+                    {{ __('Request an AI-improved rewrite of any field. This runs in the background and the page updates automatically when the suggestion is ready.') }}
                 </p>
 
                 <div class="divide-y divide-gray-200">
