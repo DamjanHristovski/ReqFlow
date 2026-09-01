@@ -39,27 +39,39 @@
                 </div>
             </div>
 
+            @php $hasAiKey = auth()->user()?->hasAiConfigured(); @endphp
+
             <div class="mt-6 bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-lg font-medium text-gray-900">{{ __('AI Next Steps') }}</h3>
+                <div class="flex items-center justify-between mb-1">
+                    <h3 class="text-lg font-medium text-gray-900">{{ __('AI Review & Next Steps') }}</h3>
                     @can('update', $userStory)
                         <form method="POST" action="{{ route('user-stories.ai.generate-next-steps', $userStory) }}">
                             @csrf
-                            <x-secondary-button type="submit">{{ __('Generate Next Steps') }}</x-secondary-button>
+                            <x-secondary-button type="submit" :disabled="! $hasAiKey" :title="! $hasAiKey ? __('Add an AI API key in your profile to enable this.') : false">
+                                {{ $latestNextSteps && $latestNextSteps->isCompleted() ? __('Regenerate') : __('Generate') }}
+                            </x-secondary-button>
                         </form>
                     @endcan
                 </div>
 
+                <p class="mb-3 text-sm text-gray-600">
+                    {{ __('AI reviews this user story and lists missing information, next actions, risks, and stakeholder questions as read-only feedback that never changes your story.') }}
+                </p>
+
+                @unless ($hasAiKey)
+                    <p class="mb-3 text-sm text-gray-500">{{ __('Add an AI API key in your profile to enable AI features.') }}</p>
+                @endunless
+
                 @if ($latestNextSteps)
                     @if ($latestNextSteps->isPending() || $latestNextSteps->isProcessing())
-                        <p class="text-sm text-gray-600">{{ __('AI is analyzing this user story — refresh in a moment.') }}</p>
+                        <x-ai-pending :request="$latestNextSteps" :message="__('AI is reviewing this user story… the page will update automatically.')" />
                     @elseif ($latestNextSteps->isFailed())
                         <p class="text-sm text-red-700">{{ __('AI request failed: :error', ['error' => $latestNextSteps->error_message]) }}</p>
                     @elseif ($latestNextSteps->isCompleted())
-                        <p class="text-gray-900 whitespace-pre-line">{{ $latestNextSteps->response }}</p>
+                        <div class="mt-2 rounded-md bg-gray-50 p-4 text-gray-900 whitespace-pre-line">{{ $latestNextSteps->response }}</div>
                     @endif
                 @else
-                    <p class="text-gray-600">{{ __('No next-steps analysis yet.') }}</p>
+                    <p class="text-sm text-gray-500">{{ __('No review yet — click Generate.') }}</p>
                 @endif
             </div>
 
@@ -67,11 +79,23 @@
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-lg font-medium text-gray-900">{{ __('Acceptance Criteria') }}</h3>
                     @can('create', [App\Models\AcceptanceCriterion::class, $userStory])
-                        <a href="{{ route('user-stories.acceptance-criteria.create', $userStory) }}">
-                            <x-primary-button>{{ __('New Acceptance Criterion') }}</x-primary-button>
-                        </a>
+                        <div class="flex items-center gap-2">
+                            <form method="POST" action="{{ route('user-stories.ai.generate-acceptance-criteria', $userStory) }}">
+                                @csrf
+                                <x-secondary-button type="submit" :disabled="! $hasAiKey" :title="! $hasAiKey ? __('Add an AI API key in your profile to enable this.') : false">{{ __('Generate with AI') }}</x-secondary-button>
+                            </form>
+                            <a href="{{ route('user-stories.acceptance-criteria.create', $userStory) }}">
+                                <x-primary-button>{{ __('New Acceptance Criterion') }}</x-primary-button>
+                            </a>
+                        </div>
                     @endcan
                 </div>
+
+                @if ($latestCriteria && ($latestCriteria->isPending() || $latestCriteria->isProcessing()))
+                    <x-ai-pending class="mb-3" :request="$latestCriteria" :message="__('AI is generating acceptance criteria… the page will update automatically.')" />
+                @elseif ($latestCriteria && $latestCriteria->isFailed())
+                    <p class="mb-3 text-sm text-red-700">{{ __('AI request failed: :error', ['error' => $latestCriteria->error_message]) }}</p>
+                @endif
 
                 @if ($userStory->acceptanceCriteria->isEmpty())
                     <p class="text-gray-600">{{ __('No acceptance criteria yet.') }}</p>

@@ -45,7 +45,12 @@ class SpecificationController extends Controller
             ->latest()
             ->first();
 
-        return view('specifications.show', compact('specification', 'comments', 'allComments', 'latestNextSteps'));
+        $latestUserStories = $specification->aiRequests()
+            ->where('type', AiRequest::TYPE_GENERATE_USER_STORIES)
+            ->latest()
+            ->first();
+
+        return view('specifications.show', compact('specification', 'comments', 'allComments', 'latestNextSteps', 'latestUserStories'));
     }
 
     public function edit(Specification $specification)

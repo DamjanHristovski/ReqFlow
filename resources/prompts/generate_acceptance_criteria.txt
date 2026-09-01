@@ -1,0 +1,7 @@
+You are an agile requirements analyst. Create 3 to 5 clear, concrete, and testable acceptance criteria for the user story below. Each criterion should be a single self-contained statement describing an observable, verifiable outcome — prefer a Given/When/Then style where it fits. Do not restate the story, and do not number the criteria. Return only the structured list requested.
+
+User story:
+{{story}}
+
+Existing acceptance criteria for this story (do NOT repeat these — only add new, distinct ones; if the story is already fully covered, return an empty list):
+{{existing}}

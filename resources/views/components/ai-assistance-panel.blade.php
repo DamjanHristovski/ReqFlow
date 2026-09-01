@@ -6,6 +6,7 @@
         $model instanceof \App\Models\UserStory => 'user-stories.ai.improve-text',
         $model instanceof \App\Models\AcceptanceCriterion => 'acceptance-criteria.ai.improve-text',
     };
+    $hasAiKey = auth()->user()?->hasAiConfigured();
 @endphp
 
 <div class="py-4 first:pt-0 last:pb-0">
@@ -14,14 +15,14 @@
         <form method="POST" action="{{ route($improveRouteName, $model) }}">
             @csrf
             <input type="hidden" name="field" value="{{ $field }}">
-            <x-secondary-button type="submit">{{ __('Improve') }}</x-secondary-button>
+            <x-secondary-button type="submit" :disabled="! $hasAiKey" :title="! $hasAiKey ? __('Add an AI API key in your profile to enable this.') : false">{{ __('Improve') }}</x-secondary-button>
         </form>
     </div>
 
     @if ($aiRequest)
         <div class="mt-2 p-3 rounded-md {{ $aiRequest->isFailed() ? 'bg-red-50' : 'bg-indigo-50' }}">
             @if ($aiRequest->isPending() || $aiRequest->isProcessing())
-                <p class="text-sm text-gray-600">{{ __('AI is working on this — refresh in a moment.') }}</p>
+                <x-ai-pending :request="$aiRequest" :message="__('AI is improving this field… the page will update automatically.')" />
             @elseif ($aiRequest->isFailed())
                 <p class="text-sm text-red-700">{{ __('AI request failed: :error', ['error' => $aiRequest->error_message]) }}</p>
             @elseif ($aiRequest->isCompleted())

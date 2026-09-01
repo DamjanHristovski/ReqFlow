@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreProjectRequest;
 use App\Http\Requests\UpdateProjectRequest;
+use App\Models\AiRequest;
 use App\Models\Project;
 use App\Models\Team;
 use Illuminate\Support\Facades\Auth;
@@ -42,7 +43,12 @@ class ProjectController extends Controller
 
         $project->load('specifications', 'userStories');
 
-        return view('projects.show', compact('project'));
+        $latestImport = $project->aiRequests()
+            ->where('type', AiRequest::TYPE_IMPORT_PDF)
+            ->latest()
+            ->first();
+
+        return view('projects.show', compact('project', 'latestImport'));
     }
 
     public function edit(Project $project)

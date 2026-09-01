@@ -12,12 +12,12 @@ use App\Models\Team;
 use App\Models\TeamMember;
 use App\Models\User;
 use App\Models\UserStory;
-use App\Services\OpenAIService;
+use App\Services\AiService;
 use Exception;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
-use OpenAI\Laravel\Facades\OpenAI;
-use OpenAI\Responses\Chat\CreateResponse;
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Testing\TextResponseFake;
 use Tests\TestCase;
 
 class AiRequestTest extends TestCase
@@ -124,10 +124,8 @@ class AiRequestTest extends TestCase
 
     public function test_improve_text_job_completes_the_request(): void
     {
-        OpenAI::fake([
-            CreateResponse::fake([
-                'choices' => [['message' => ['content' => 'Users should be able to authenticate securely.']]],
-            ]),
+        Prism::fake([
+            TextResponseFake::make()->withText('Users should be able to authenticate securely.'),
         ]);
 
         [, , $member, $specification] = $this->createSpecificationWithOwnerAndMember();
@@ -140,7 +138,7 @@ class AiRequestTest extends TestCase
             'prompt' => 'Users need login',
         ]);
 
-        (new ImproveTextJob($aiRequest))->handle(app(OpenAIService::class));
+        (new ImproveTextJob($aiRequest))->handle(app(AiService::class));
 
         $aiRequest->refresh();
         $this->assertTrue($aiRequest->isCompleted());
@@ -149,10 +147,8 @@ class AiRequestTest extends TestCase
 
     public function test_generate_next_steps_job_completes_the_request(): void
     {
-        OpenAI::fake([
-            CreateResponse::fake([
-                'choices' => [['message' => ['content' => 'Missing Information: none. Next Actions: ship it.']]],
-            ]),
+        Prism::fake([
+            TextResponseFake::make()->withText('Missing Information: none. Next Actions: ship it.'),
         ]);
 
         [, , $member, $specification] = $this->createSpecificationWithOwnerAndMember();
@@ -164,7 +160,7 @@ class AiRequestTest extends TestCase
             'status' => AiRequest::STATUS_PENDING,
         ]);
 
-        (new GenerateNextStepsJob($aiRequest))->handle(app(OpenAIService::class));
+        (new GenerateNextStepsJob($aiRequest))->handle(app(AiService::class));
 
         $aiRequest->refresh();
         $this->assertTrue($aiRequest->isCompleted());
@@ -331,7 +327,7 @@ class AiRequestTest extends TestCase
         $team = Team::factory()->create(['created_by' => $owner->id]);
         $team->teamMembers()->create(['user_id' => $owner->id, 'role' => TeamMember::ROLE_OWNER]);
 
-        $member = User::factory()->create();
+        $member = User::factory()->create(['ai_provider' => 'openai', 'ai_api_key' => 'sk-test-key']);
         $team->teamMembers()->create(['user_id' => $member->id, 'role' => TeamMember::ROLE_MEMBER]);
 
         $project = Project::factory()->create(['team_id' => $team->id]);
@@ -349,7 +345,7 @@ class AiRequestTest extends TestCase
         $team = Team::factory()->create(['created_by' => $owner->id]);
         $team->teamMembers()->create(['user_id' => $owner->id, 'role' => TeamMember::ROLE_OWNER]);
 
-        $member = User::factory()->create();
+        $member = User::factory()->create(['ai_provider' => 'openai', 'ai_api_key' => 'sk-test-key']);
         $team->teamMembers()->create(['user_id' => $member->id, 'role' => TeamMember::ROLE_MEMBER]);
 
         $project = Project::factory()->create(['team_id' => $team->id]);

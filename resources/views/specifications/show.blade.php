@@ -59,27 +59,69 @@
                 </div>
             </div>
 
+            @php $hasAiKey = auth()->user()?->hasAiConfigured(); @endphp
+
             <div class="mt-6 bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-lg font-medium text-gray-900">{{ __('AI Next Steps') }}</h3>
+                <div class="flex items-center justify-between mb-1">
+                    <h3 class="text-lg font-medium text-gray-900">{{ __('AI Review & Next Steps') }}</h3>
                     @can('update', $specification)
                         <form method="POST" action="{{ route('ai.generate-next-steps', $specification) }}">
                             @csrf
-                            <x-secondary-button type="submit">{{ __('Generate Next Steps') }}</x-secondary-button>
+                            <x-secondary-button type="submit" :disabled="! $hasAiKey" :title="! $hasAiKey ? __('Add an AI API key in your profile to enable this.') : false">
+                                {{ $latestNextSteps && $latestNextSteps->isCompleted() ? __('Regenerate') : __('Generate') }}
+                            </x-secondary-button>
                         </form>
                     @endcan
                 </div>
 
+                <p class="mb-3 text-sm text-gray-600">
+                    {{ __('AI reviews the whole specification and lists missing information, next actions, risks, and stakeholder questions as read-only feedback that never changes your spec.') }}
+                </p>
+
+                @unless ($hasAiKey)
+                    <p class="mb-3 text-sm text-gray-500">{{ __('Add an AI API key in your profile to enable AI features.') }}</p>
+                @endunless
+
                 @if ($latestNextSteps)
                     @if ($latestNextSteps->isPending() || $latestNextSteps->isProcessing())
-                        <p class="text-sm text-gray-600">{{ __('AI is analyzing this specification — refresh in a moment.') }}</p>
+                        <x-ai-pending :request="$latestNextSteps" :message="__('AI is reviewing this specification… this can take a few seconds. The page will update automatically.')" />
                     @elseif ($latestNextSteps->isFailed())
                         <p class="text-sm text-red-700">{{ __('AI request failed: :error', ['error' => $latestNextSteps->error_message]) }}</p>
                     @elseif ($latestNextSteps->isCompleted())
-                        <p class="text-gray-900 whitespace-pre-line">{{ $latestNextSteps->response }}</p>
+                        <div class="mt-2 rounded-md bg-gray-50 p-4 text-gray-900 whitespace-pre-line">{{ $latestNextSteps->response }}</div>
                     @endif
                 @else
-                    <p class="text-gray-600">{{ __('No next-steps analysis yet.') }}</p>
+                    <p class="text-sm text-gray-500">{{ __('No review yet — click Generate.') }}</p>
+                @endif
+            </div>
+
+            <div class="mt-6 bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900">{{ __('Generate User Stories') }}</h3>
+                    @can('create', [App\Models\UserStory::class, $specification->project])
+                        <form method="POST" action="{{ route('ai.generate-user-stories', $specification) }}">
+                            @csrf
+                            <x-secondary-button type="submit" :disabled="! $hasAiKey" :title="! $hasAiKey ? __('Add an AI API key in your profile to enable this.') : false">{{ __('Generate User Stories') }}</x-secondary-button>
+                        </form>
+                    @endcan
+                </div>
+
+                <p class="text-sm text-gray-600">
+                    {{ __('AI reads this specification and drafts user stories (with acceptance criteria) into this project. They\'re fully editable afterward.') }}
+                </p>
+
+                @if ($latestUserStories)
+                    <div class="mt-3">
+                        @if ($latestUserStories->isPending() || $latestUserStories->isProcessing())
+                            <x-ai-pending :request="$latestUserStories" :message="__('AI is generating user stories… this can take a few seconds. The page will update automatically.')" />
+                        @elseif ($latestUserStories->isFailed())
+                            <p class="text-sm text-red-700">{{ __('AI request failed: :error', ['error' => $latestUserStories->error_message]) }}</p>
+                        @elseif ($latestUserStories->isCompleted())
+                            <p class="text-sm text-green-700">{{ $latestUserStories->response }}
+                                <a href="{{ route('projects.show', $specification->project) }}" class="underline">{{ __('View in project') }}</a>
+                            </p>
+                        @endif
+                    </div>
                 @endif
             </div>
 

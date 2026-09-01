@@ -47,7 +47,12 @@ class UserStoryController extends Controller
             ->latest()
             ->first();
 
-        return view('user-stories.show', compact('userStory', 'comments', 'allComments', 'latestNextSteps'));
+        $latestCriteria = $userStory->aiRequests()
+            ->where('type', AiRequest::TYPE_GENERATE_ACCEPTANCE_CRITERIA)
+            ->latest()
+            ->first();
+
+        return view('user-stories.show', compact('userStory', 'comments', 'allComments', 'latestNextSteps', 'latestCriteria'));
     }
 
     public function edit(UserStory $userStory)
